@@ -1,24 +1,26 @@
-// src/componentes/layout/DashboardLayout.jsx
 import { AppShell } from "@mantine/core";
-import SidebarItems from "./SidebarItems";
-import Header from "./Header";
+import { Outlet } from "react-router-dom";
+import SidebarItems from "./SidebarItems.jsx";  // 👈 corregido
+import Header from "./Header.jsx";
 
-export default function DashboardLayout({ children, user, onLogout }) {
+export default function DashboardLayout() {
   return (
     <AppShell
       padding="md"
-      navbar={{ width: 250, breakpoint: "sm", collapsed: { mobile: false } }}
+      navbar={{ width: 250, breakpoint: "sm" }}
       header={{ height: 60 }}
     >
       <AppShell.Header>
-        <Header user={user} onLogout={onLogout} />
+        <Header />
       </AppShell.Header>
 
       <AppShell.Navbar p="md">
         <SidebarItems />
       </AppShell.Navbar>
 
-      <AppShell.Main>{children}</AppShell.Main>
+      <AppShell.Main>
+        <Outlet />
+      </AppShell.Main>
     </AppShell>
   );
 }

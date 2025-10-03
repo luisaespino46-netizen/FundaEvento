@@ -1,17 +1,23 @@
+// src/auth/LogoutButton.jsx
 import { Button } from "@mantine/core";
-import { supabase } from "../../supabase";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "../supabase";
 
 export default function LogoutButton() {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    navigate("/"); // 👈 vuelve al login
+    navigate("/login", { replace: true });
   };
 
   return (
-    <Button color="red" onClick={handleLogout}>
+    <Button
+      color="red"
+      variant="light"
+      size="xs"
+      onClick={handleLogout}
+    >
       Cerrar Sesión
     </Button>
   );
