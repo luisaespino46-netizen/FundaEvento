@@ -120,6 +120,7 @@ export default function Eventos() {
               <Badge mt="sm" color="blue" variant="light">{evento.categoria}</Badge>
 
               <Group mt="md">
+                <Button size="xs" variant="default">Ver Detalles</Button>
                 <Button size="xs" color="dark">Inscribirse</Button>
                 <Button
                   size="xs"
@@ -130,6 +131,27 @@ export default function Eventos() {
                   }}
                 >
                   Editar
+                </Button>
+                <Button
+                  size="xs"
+                  color="red"
+                  onClick={async () => {
+                    const confirmacion = window.confirm("¿Estás seguro de eliminar este evento?");
+                    if (confirmacion) {
+                      const { error } = await supabase
+                        .from("eventos")
+                        .delete()
+                        .eq("id", evento.id);
+                      if (!error) {
+                        fetchEventos(); // recargar
+                      } else {
+                        alert("Error al eliminar el evento.");
+                        console.error(error);
+                      }
+                    }
+                  }}
+                >
+                  Eliminar
                 </Button>
               </Group>
             </Paper>
