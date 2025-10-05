@@ -1,3 +1,4 @@
+// src/componentes/Eventos.jsx
 import { useState, useEffect } from "react";
 import {
   Title,
@@ -10,8 +11,9 @@ import {
   Progress,
   TextInput,
   Select,
+  Menu,
 } from "@mantine/core";
-import { IconCalendar, IconClock, IconMapPin } from "@tabler/icons-react";
+import { IconCalendar, IconClock, IconMapPin, IconDots } from "@tabler/icons-react";
 import { supabase } from "../supabase";
 import CrearEventoModal from "./CrearEventoModal";
 
@@ -29,6 +31,24 @@ export default function Eventos() {
   useEffect(() => {
     fetchEventos();
   }, []);
+
+  const calcularEstado = (evento) => {
+    if (evento.estado_manual) return evento.estado_manual;
+    const fechaEvento = new Date(evento.fecha);
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    fechaEvento.setHours(0, 0, 0, 0);
+    return fechaEvento < hoy ? "Completado" : "Activo";
+  };
+
+  const cambiarEstadoManual = async (id, nuevoEstado) => {
+    const { error } = await supabase
+      .from("eventos")
+      .update({ estado_manual: nuevoEstado })
+      .eq("id", id);
+    if (!error) fetchEventos();
+    else alert("Error al actualizar el estado.");
+  };
 
   return (
     <div>
@@ -49,7 +69,6 @@ export default function Eventos() {
         eventoEditar={eventoEditando}
       />
 
-      {/* Filtros */}
       <Paper p="md" mb="lg" withBorder radius="md">
         <Group grow>
           <TextInput placeholder="Buscar eventos..." />
@@ -59,15 +78,19 @@ export default function Eventos() {
         </Group>
       </Paper>
 
-      {/* Grid de eventos */}
       <Grid>
         {eventos.map((evento) => (
           <Grid.Col span={{ base: 12, md: 6, lg: 4 }} key={evento.id}>
             <Paper withBorder shadow="sm" radius="md" p="md">
               <Group justify="space-between" mb="xs">
                 <Text fw={600}>{evento.titulo}</Text>
-                <Badge color={evento.estado === "Activo" ? "green" : "gray"}>
-                  {evento.estado}
+                <Badge
+                  color={
+                    calcularEstado(evento) === "Cancelado" ? "red" :
+                    calcularEstado(evento) === "Completado" ? "blue" : "green"
+                  }
+                >
+                  {calcularEstado(evento)}
                 </Badge>
               </Group>
 
@@ -85,14 +108,9 @@ export default function Eventos() {
                 <Text size="xs">{evento.ubicacion ?? evento.lugar}</Text>
               </Group>
 
-              {/* Participantes */}
               <Text size="xs" fw={500}>Participantes</Text>
               <Progress
-                value={
-                  evento.participantes_max
-                    ? (evento.participantes_actual / evento.participantes_max) * 100
-                    : 0
-                }
+                value={evento.participantes_max ? (evento.participantes_actual / evento.participantes_max) * 100 : 0}
                 size="sm"
                 color="blue"
                 mb="xs"
@@ -101,14 +119,9 @@ export default function Eventos() {
                 {evento.participantes_actual ?? 0}/{evento.participantes_max ?? evento.cupo_maximo ?? 0}
               </Text>
 
-              {/* Presupuesto */}
               <Text size="xs" fw={500} mt="sm">Presupuesto</Text>
               <Progress
-                value={
-                  evento.presupuesto_max
-                    ? (evento.presupuesto_actual / evento.presupuesto_max) * 100
-                    : 0
-                }
+                value={evento.presupuesto_max ? (evento.presupuesto_actual / evento.presupuesto_max) * 100 : 0}
                 size="sm"
                 color="teal"
                 mb="xs"
@@ -119,40 +132,44 @@ export default function Eventos() {
 
               <Badge mt="sm" color="blue" variant="light">{evento.categoria}</Badge>
 
-              <Group mt="md">
-                <Button size="xs" variant="default">Ver Detalles</Button>
+              <Group mt="md" justify="space-between">
                 <Button size="xs" color="dark">Inscribirse</Button>
-                <Button
-                  size="xs"
-                  color="blue"
-                  onClick={() => {
-                    setEventoEditando(evento);
-                    setOpened(true);
-                  }}
-                >
-                  Editar
-                </Button>
-                <Button
-                  size="xs"
-                  color="red"
-                  onClick={async () => {
-                    const confirmacion = window.confirm("¿Estás seguro de eliminar este evento?");
-                    if (confirmacion) {
-                      const { error } = await supabase
-                        .from("eventos")
-                        .delete()
-                        .eq("id", evento.id);
-                      if (!error) {
-                        fetchEventos(); // recargar
-                      } else {
-                        alert("Error al eliminar el evento.");
-                        console.error(error);
+
+                <Menu shadow="md" width={180} position="bottom-end" withArrow>
+                  <Menu.Target>
+                    <Button size="xs" variant="default">
+                      <IconDots size={16} />
+                    </Button>
+                  </Menu.Target>
+                  <Menu.Dropdown>
+                    <Menu.Item onClick={() => { setEventoEditando(evento); setOpened(true); }}>
+                      Editar
+                    </Menu.Item>
+
+                    {calcularEstado(evento) === "Activo" && (
+                      <Menu.Item onClick={() => cambiarEstadoManual(evento.id, "Cancelado")}>Cancelar</Menu.Item>
+                    )}
+
+                    {calcularEstado(evento) === "Activo" && (
+                      <Menu.Item onClick={() => cambiarEstadoManual(evento.id, "Completado")}>Completar</Menu.Item>
+                    )}
+
+                    {calcularEstado(evento) === "Cancelado" && (
+                      <Menu.Item onClick={() => cambiarEstadoManual(evento.id, "Activo")}>Reactivar</Menu.Item>
+                    )}
+
+                    <Menu.Item color="red" onClick={async () => {
+                      const confirmacion = window.confirm("¿Estás seguro de eliminar este evento?");
+                      if (confirmacion) {
+                        const { error } = await supabase.from("eventos").delete().eq("id", evento.id);
+                        if (!error) fetchEventos();
+                        else alert("Error al eliminar el evento.");
                       }
-                    }
-                  }}
-                >
-                  Eliminar
-                </Button>
+                    }}>
+                      Eliminar
+                    </Menu.Item>
+                  </Menu.Dropdown>
+                </Menu>
               </Group>
             </Paper>
           </Grid.Col>
