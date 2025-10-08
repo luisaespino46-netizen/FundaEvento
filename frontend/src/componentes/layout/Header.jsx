@@ -1,40 +1,63 @@
 // src/componentes/layout/Header.jsx
-import { Group, Flex, Text, ActionIcon, Avatar, Button } from "@mantine/core";
+import { Group, Text, Button, Avatar } from "@mantine/core";
 import { IconBell } from "@tabler/icons-react";
-import LogoutButton from "../../auth/LogoutButton";
+import { supabase } from "../../supabase";
+import { useAuth } from "../../hooks/useAuth";
+import { useNavigate } from "react-router-dom";
 
 export default function Header() {
+  const navigate = useNavigate();
+  const { user, profile } = useAuth();
+
+  // 🔹 Cerrar sesión
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/login");
+  };
+
+  // 🔹 Si aún no se ha cargado el perfil
+  if (!profile) {
+    return (
+      <Group justify="space-between" p="sm">
+        <Text>FUNDAEVENTO</Text>
+        <Text size="sm" c="dimmed">
+          Cargando...
+        </Text>
+      </Group>
+    );
+  }
+
+  // 🔹 Inicial del nombre para el avatar
+  const inicial = profile.nombre ? profile.nombre.charAt(0).toUpperCase() : "?";
+
   return (
-    <Flex
-      justify="space-between"
-      align="center"
-      px="md"
-      py="sm"
-      style={{ borderBottom: "1px solid #eaeaea", background: "#fff" }}
-    >
-      {/* Logo */}
-      <Text fw={700} c="blue">
+    <Group justify="space-between" p="sm">
+      <Text fw={700} fz="lg">
         FUNDAEVENTO
       </Text>
 
-      {/* Sección derecha */}
-      <Group spacing="lg">
-        {/* Notificación */}
-        <ActionIcon variant="subtle" color="dark">
-          <IconBell size={20} />
-        </ActionIcon>
+      <Group>
+        {/* 🔔 Icono de notificaciones */}
+        <IconBell size={20} style={{ marginRight: "10px" }} />
 
-        {/* Avatar + Nombre */}
-        <Group spacing="xs">
-          <Avatar radius="xl" color="blue">
-            A
-          </Avatar>
-          <Text fw={500}>Admin</Text>
-        </Group>
+        {/* 👤 Avatar dinámico */}
+        <Avatar color="blue" radius="xl">
+          {inicial}
+        </Avatar>
 
-        {/* Botón de Logout */}
-        <LogoutButton />
+        {/* 🧑 Nombre y rol dinámico */}
+        <Text fw={500}>
+          {profile.nombre}{" "}
+          <Text span c="dimmed" fz="sm">
+            ({profile.rol})
+          </Text>
+        </Text>
+
+        {/* 🔴 Botón de cerrar sesión */}
+        <Button color="red" variant="light" size="xs" onClick={handleLogout}>
+          Cerrar Sesión
+        </Button>
       </Group>
-    </Flex>
+    </Group>
   );
 }

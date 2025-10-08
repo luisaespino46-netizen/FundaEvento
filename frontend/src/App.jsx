@@ -13,27 +13,69 @@ export default function App() {
   return (
     <Router>
       <Routes>
-        {/* Ruta pública */}
+        {/* 🌐 Ruta pública */}
         <Route path="/login" element={<Login />} />
 
-        {/* Rutas protegidas */}
+        {/* 🔒 Rutas protegidas dentro del DashboardLayout */}
         <Route
           path="/"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute roles={["Admin", "Coordinador", "Participante"]}>
               <DashboardLayout />
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/dashboard" />} />
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="eventos" element={<Eventos />} />
-          <Route path="calendario" element={<Calendario />} />
-          <Route path="usuarios" element={<Usuarios />} />
-          <Route path="reportes" element={<Reportes />} />
+          {/* 🔹 Redirección inicial */}
+          <Route index element={<Navigate to="/dashboard" replace />} />
+
+          {/* 🔹 Vistas accesibles por todos los roles */}
+          <Route
+            path="dashboard"
+            element={
+              <ProtectedRoute roles={["Admin", "Coordinador", "Participante"]}>
+                <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="eventos"
+            element={
+              <ProtectedRoute roles={["Admin", "Coordinador", "Participante"]}>
+                <Eventos />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="calendario"
+            element={
+              <ProtectedRoute roles={["Admin", "Coordinador", "Participante"]}>
+                <Calendario />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* 🔹 Solo visible para Admin */}
+          <Route
+            path="usuarios"
+            element={
+              <ProtectedRoute roles={["Admin"]}>
+                <Usuarios />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* 🔹 Visible para Admin y Coordinador */}
+          <Route
+            path="reportes"
+            element={
+              <ProtectedRoute roles={["Admin", "Coordinador"]}>
+                <Reportes />
+              </ProtectedRoute>
+            }
+          />
         </Route>
 
-        {/* Cualquier ruta desconocida redirige al login */}
+        {/* 🚫 Cualquier ruta desconocida redirige al login */}
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </Router>
