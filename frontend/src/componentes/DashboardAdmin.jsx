@@ -51,21 +51,11 @@ export default function DashboardAdmin() {
         .select("*", { count: "exact", head: true });
       if (partError) throw partError;
 
-      // 🔹 Obtener presupuesto general manual (si existe)
-      let presupuestoTotal = 0;
-      const { data: config } = await supabase
-        .from("configuracion")
-        .select("presupuesto_general")
-        .maybeSingle();
-
-      if (config?.presupuesto_general) {
-        presupuestoTotal = config.presupuesto_general;
-      } else {
-        presupuestoTotal = eventos.reduce(
-          (sum, e) => sum + (e.presupuesto_max || 0),
-          0
-        );
-      }
+      // 🔹 Calcular presupuesto total directamente desde los eventos
+      const presupuestoTotal = eventos.reduce(
+        (sum, e) => sum + (e.presupuesto_max || 0),
+        0
+      );
 
       // 🔹 Fondos utilizados
       const fondosUtilizados = eventos.reduce(
@@ -246,12 +236,10 @@ export default function DashboardAdmin() {
                       </div>
                       <div>
                         <Text size="sm">
-                          {evento.participantes_actual}/
-                          {evento.participantes_max} participantes
+                          {evento.participantes_actual}/{evento.participantes_max} participantes
                         </Text>
                         <Text fw={600}>
-                          Q{evento.presupuesto_actual || 0} / Q
-                          {evento.presupuesto_max || 0}
+                          Q{evento.presupuesto_actual || 0} / Q{evento.presupuesto_max || 0}
                         </Text>
                       </div>
                     </Group>

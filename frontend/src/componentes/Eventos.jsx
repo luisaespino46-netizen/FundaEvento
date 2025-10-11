@@ -12,24 +12,46 @@ import {
   Select,
   Menu,
 } from "@mantine/core";
-import { IconCalendar, IconClock, IconMapPin, IconDots } from "@tabler/icons-react";
+import {
+  IconCalendar,
+  IconClock,
+  IconMapPin,
+  IconDots,
+  IconUser,
+} from "@tabler/icons-react";
 import { supabase } from "../supabase";
 import CrearEventoModal from "./CrearEventoModal";
-import { useAuth } from "../hooks/useAuth"; // ✅ Hook para obtener usuario y rol
+import { useAuth } from "../hooks/useAuth";
 
 export default function Eventos() {
   const [eventos, setEventos] = useState([]);
   const [opened, setOpened] = useState(false);
   const [eventoEditando, setEventoEditando] = useState(null);
-  const { profile } = useAuth(); // ✅ Usuario actual con auth_id, id, rol, etc.
+  const { profile } = useAuth();
 
-  // 🔹 Traer eventos e inscripciones del usuario
   const fetchEventos = async () => {
     try {
-      const { data: eventosData, error: eventosError } = await supabase.from("eventos").select("*");
+      let query = supabase
+        .from("eventos")
+        .select("*, coordinador:coordinador_id(nombre, rol)");
+
+      const { data: eventosDataRaw, error: eventosError } = await query;
       if (eventosError) throw eventosError;
 
-      // ✅ Obtener el id numérico del usuario desde la tabla usuarios
+      let eventosData = [...eventosDataRaw];
+
+      if (profile?.rol === "Coordinador") {
+        const { data: usuarioData } = await supabase
+          .from("usuarios")
+          .select("id")
+          .eq("auth_id", profile?.auth_id)
+          .single();
+
+        eventosData = eventosData.filter(
+          (e) => e.coordinador_id === usuarioData.id
+        );
+      }
+
       const { data: usuarioData, error: usuarioError } = await supabase
         .from("usuarios")
         .select("id")
@@ -39,18 +61,16 @@ export default function Eventos() {
       if (usuarioError) throw usuarioError;
       const usuarioId = usuarioData?.id;
 
-      // ✅ Traer inscripciones del usuario actual
-      const { data: inscripcionesData, error: inscripcionesError } = await supabase
-        .from("inscripciones")
-        .select("evento_id")
-        .eq("usuario_id", usuarioId);
+      const { data: inscripcionesData, error: inscripcionesError } =
+        await supabase
+          .from("inscripciones")
+          .select("evento_id")
+          .eq("usuario_id", usuarioId);
 
       if (inscripcionesError) throw inscripcionesError;
 
-      // ✅ Crear lista de ids de eventos inscritos
       const eventosInscritos = inscripcionesData.map((i) => i.evento_id);
 
-      // ✅ Combinar eventos con su estado de inscripción
       const eventosConEstado = eventosData.map((evento) => ({
         ...evento,
         inscrito: eventosInscritos.includes(evento.id),
@@ -66,7 +86,6 @@ export default function Eventos() {
     if (profile) fetchEventos();
   }, [profile]);
 
-  // 🔹 Calcular estado del evento
   const calcularEstado = (evento) => {
     if (evento.estado_manual) return evento.estado_manual;
     const fechaEvento = new Date(evento.fecha);
@@ -76,13 +95,14 @@ export default function Eventos() {
     return fechaEvento < hoy ? "Completado" : "Activo";
   };
 
-  // 🔹 Cambiar estado manual (Admin / Coordinador)
   const cambiarEstadoManual = async (id, nuevoEstado) => {
-    const { error } = await supabase.from("eventos").update({ estado_manual: nuevoEstado }).eq("id", id);
+    const { error } = await supabase
+      .from("eventos")
+      .update({ estado_manual: nuevoEstado })
+      .eq("id", id);
     if (!error) fetchEventos();
   };
 
-  // ✅ Inscribirse en un evento
   const inscribirseEvento = async (evento) => {
     try {
       const { data: usuarioData } = await supabase
@@ -94,7 +114,11 @@ export default function Eventos() {
       const usuarioId = usuarioData.id;
 
       const { error } = await supabase.from("inscripciones").insert([
-        { evento_id: evento.id, usuario_id: usuarioId, estado: "inscrito" },
+        {
+          evento_id: evento.id,
+          usuario_id: usuarioId,
+          estado: "inscrito",
+        },
       ]);
 
       if (error) throw error;
@@ -107,7 +131,6 @@ export default function Eventos() {
     }
   };
 
-  // ❌ Cancelar inscripción
   const cancelarInscripcion = async (evento) => {
     try {
       const { data: usuarioData } = await supabase
@@ -142,7 +165,13 @@ export default function Eventos() {
         </div>
 
         {(profile?.rol === "Admin" || profile?.rol === "Coordinador") && (
-          <Button color="blue" onClick={() => { setEventoEditando(null); setOpened(true); }}>
+          <Button
+            color="blue"
+            onClick={() => {
+              setEventoEditando(null);
+              setOpened(true);
+            }}
+          >
             + Nuevo Evento
           </Button>
         )}
@@ -158,10 +187,20 @@ export default function Eventos() {
       <Paper p="md" mb="lg" withBorder radius="md">
         <Group grow>
           <TextInput placeholder="Buscar eventos..." />
-          <Select placeholder="Todos los estados" data={["Activo", "Completado", "Cancelado"]} />
+          <Select
+            placeholder="Todos los estados"
+            data={["Activo", "Completado", "Cancelado"]}
+          />
           <Select
             placeholder="Todas las categorías"
-            data={["Educativo", "Salud", "Deportivo", "Tecnología", "Innovación", "Música"]}
+            data={[
+              "Educativo",
+              "Salud",
+              "Deportivo",
+              "Tecnología",
+              "Innovación",
+              "Música",
+            ]}
           />
           <Button variant="default">Limpiar Filtros</Button>
         </Group>
@@ -202,11 +241,32 @@ export default function Eventos() {
                 <Text size="xs">{evento.ubicacion ?? evento.lugar}</Text>
               </Group>
 
-              <Text size="xs" fw={500}>Participantes</Text>
+              {evento.coordinador && (
+                <Group gap="xs" mb="xs">
+                  <IconUser size={16} />
+                  <Text size="xs">
+                    Coordinador: {evento.coordinador.nombre} (
+                    {evento.coordinador.rol})
+                  </Text>
+                </Group>
+              )}
+
+              {profile?.rol === "Admin" && (
+                <Text size="xs" mb="xs">
+                  💰 Q{evento.presupuesto_actual ?? 0} / Q
+                  {evento.presupuesto_max ?? 0}
+                </Text>
+              )}
+
+              <Text size="xs" fw={500}>
+                Participantes
+              </Text>
               <Progress
                 value={
                   evento.participantes_max
-                    ? (evento.participantes_actual / evento.participantes_max) * 100
+                    ? (evento.participantes_actual /
+                        evento.participantes_max) *
+                      100
                     : 0
                 }
                 size="sm"
@@ -214,52 +274,84 @@ export default function Eventos() {
                 mb="xs"
               />
               <Text size="xs">
-                {evento.participantes_actual ?? 0}/{evento.participantes_max ?? evento.cupo_maximo ?? 0}
+                {evento.participantes_actual ?? 0}/
+                {evento.participantes_max ??
+                  evento.cupo_maximo ??
+                  0}
               </Text>
 
               <Badge mt="sm" color="blue" variant="light">
                 {evento.categoria}
               </Badge>
 
-              {/* 🔹 Acciones por rol */}
               <Group mt="md" justify="space-between">
-                {profile?.rol === "Participante" && (
-                  evento.inscrito ? (
-                    <Button size="xs" color="red" onClick={() => cancelarInscripcion(evento)}>
+                {profile?.rol === "Participante" &&
+                  (evento.inscrito ? (
+                    <Button
+                      size="xs"
+                      color="red"
+                      onClick={() => cancelarInscripcion(evento)}
+                    >
                       Cancelar inscripción
                     </Button>
                   ) : (
-                    <Button size="xs" color="green" onClick={() => inscribirseEvento(evento)}>
+                    <Button
+                      size="xs"
+                      color="green"
+                      onClick={() => inscribirseEvento(evento)}
+                    >
                       Inscribirme
                     </Button>
-                  )
-                )}
+                  ))}
 
-                {(profile?.rol === "Admin" || profile?.rol === "Coordinador") && (
-                  <Menu shadow="md" width={180} position="bottom-end" withArrow>
+                {(profile?.rol === "Admin" ||
+                  profile?.rol === "Coordinador") && (
+                  <Menu
+                    shadow="md"
+                    width={180}
+                    position="bottom-end"
+                    withArrow
+                  >
                     <Menu.Target>
                       <Button size="xs" variant="default">
                         <IconDots size={16} />
                       </Button>
                     </Menu.Target>
                     <Menu.Dropdown>
-                      <Menu.Item onClick={() => { setEventoEditando(evento); setOpened(true); }}>
+                      <Menu.Item
+                        onClick={() => {
+                          setEventoEditando(evento);
+                          setOpened(true);
+                        }}
+                      >
                         Editar
                       </Menu.Item>
 
                       {calcularEstado(evento) === "Activo" && (
                         <>
-                          <Menu.Item onClick={() => cambiarEstadoManual(evento.id, "Cancelado")}>
+                          <Menu.Item
+                            onClick={() =>
+                              cambiarEstadoManual(evento.id, "Cancelado")
+                            }
+                          >
                             Cancelar
                           </Menu.Item>
-                          <Menu.Item onClick={() => cambiarEstadoManual(evento.id, "Completado")}>
+                          <Menu.Item
+                            onClick={() =>
+                              cambiarEstadoManual(evento.id, "Completado")
+                            }
+                          >
                             Completar
                           </Menu.Item>
                         </>
                       )}
 
                       {calcularEstado(evento) === "Cancelado" && (
-                        <Menu.Item onClick={() => cambiarEstadoManual(evento.id, "Activo")}>
+                        <Menu.Item
+                          onClick={() =>
+                            cambiarEstadoManual(evento.id, "Activo")
+                          }
+                        >
                           Reactivar
                         </Menu.Item>
                       )}
@@ -267,8 +359,15 @@ export default function Eventos() {
                       <Menu.Item
                         color="red"
                         onClick={async () => {
-                          if (window.confirm("¿Estás seguro de eliminar este evento?")) {
-                            const { error } = await supabase.from("eventos").delete().eq("id", evento.id);
+                          if (
+                            window.confirm(
+                              "¿Estás seguro de eliminar este evento?"
+                            )
+                          ) {
+                            const { error } = await supabase
+                              .from("eventos")
+                              .delete()
+                              .eq("id", evento.id);
                             if (!error) fetchEventos();
                             else alert("Error al eliminar el evento.");
                           }

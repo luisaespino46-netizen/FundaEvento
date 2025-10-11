@@ -25,10 +25,10 @@ export default function CrearEventoModal({
     lugar: "",
     participantes_max: 0,
     presupuesto_max: 0,
+    presupuesto_actual: 0,
     categoria: "",
   });
 
-  // Precargar datos si se está editando
   useEffect(() => {
     if (eventoEditar) {
       setForm({
@@ -37,8 +37,9 @@ export default function CrearEventoModal({
         fecha: eventoEditar.fecha ? new Date(eventoEditar.fecha) : null,
         hora: eventoEditar.hora || "",
         lugar: eventoEditar.ubicacion || "",
-        participantes_max: eventoEditar.cupo_maximo || 0,
-        presupuesto_max: eventoEditar.presupuesto || 0,
+        participantes_max: eventoEditar.participantes_max || eventoEditar.cupo_maximo || 0,
+        presupuesto_max: eventoEditar.presupuesto_max || eventoEditar.presupuesto || 0,
+        presupuesto_actual: eventoEditar.presupuesto_actual ?? 0,
         categoria: eventoEditar.categoria || "",
       });
     } else {
@@ -50,6 +51,7 @@ export default function CrearEventoModal({
         lugar: "",
         participantes_max: 0,
         presupuesto_max: 0,
+        presupuesto_actual: 0,
         categoria: "",
       });
     }
@@ -63,7 +65,12 @@ export default function CrearEventoModal({
       hora: form.hora ? dayjs(`2000-01-01T${form.hora}`).format("HH:mm:ss") : null,
       ubicacion: form.lugar,
       cupo_maximo: form.participantes_max,
-      presupuesto: form.presupuesto_max,
+      participantes_max: form.participantes_max,
+      presupuesto_max: form.presupuesto_max,
+      presupuesto_actual:
+        form.presupuesto_actual === undefined || form.presupuesto_actual === null
+          ? 0
+          : form.presupuesto_actual,
       categoria: form.categoria,
       estado: "Activo",
     };
@@ -83,8 +90,6 @@ export default function CrearEventoModal({
         error = res.error;
         if (!error) alert("Evento creado correctamente ✅");
       }
-
-      console.log("Resultado Supabase:", { error });
 
       if (error) throw error;
       if (onEventoCreado) onEventoCreado();
@@ -148,9 +153,14 @@ export default function CrearEventoModal({
           onChange={(value) => setForm({ ...form, participantes_max: value })}
         />
         <NumberInput
-          label="Presupuesto"
+          label="Presupuesto Máximo"
           value={form.presupuesto_max}
           onChange={(value) => setForm({ ...form, presupuesto_max: value })}
+        />
+        <NumberInput
+          label="Presupuesto Actual"
+          value={form.presupuesto_actual}
+          onChange={(value) => setForm({ ...form, presupuesto_actual: value })}
         />
       </Group>
       <Select
