@@ -10,6 +10,8 @@ import {
   Stack,
   Loader,
   Center,
+  Modal,
+  NumberInput,
 } from "@mantine/core";
 import { supabase } from "../supabase";
 import { useEffect, useState } from "react";
@@ -18,6 +20,7 @@ import {
   IconUsers,
   IconMoneybag,
   IconReport,
+  IconEdit,
 } from "@tabler/icons-react";
 
 export default function DashboardAdmin() {
@@ -31,6 +34,10 @@ export default function DashboardAdmin() {
   const [eventosRecientes, setEventosRecientes] = useState([]);
   const [notificaciones, setNotificaciones] = useState([]);
 
+  // 🔹 Para modal de edición de presupuesto
+  const [opened, setOpened] = useState(false);
+  const [nuevoPresupuesto, setNuevoPresupuesto] = useState(0);
+
   useEffect(() => {
     fetchDatos();
   }, []);
@@ -39,7 +46,15 @@ export default function DashboardAdmin() {
     try {
       setLoading(true);
 
-      // 🔹 Obtener todos los eventos
+      // 🔹 Obtener presupuesto general manual desde tabla configuracion
+      const { data: config, error: configError } = await supabase
+        .from("configuracion")
+        .select("presupuesto_general")
+        .eq("id", 1)
+        .single();
+      if (configError) throw configError;
+
+      // 🔹 Obtener eventos
       const { data: eventos, error: eventosError } = await supabase
         .from("eventos")
         .select("*");
@@ -51,26 +66,20 @@ export default function DashboardAdmin() {
         .select("*", { count: "exact", head: true });
       if (partError) throw partError;
 
-      // 🔹 Calcular presupuesto total directamente desde los eventos
-      const presupuestoTotal = eventos.reduce(
-        (sum, e) => sum + (e.presupuesto_max || 0),
-        0
-      );
-
-      // 🔹 Fondos utilizados
+      // 🔹 Calcular fondos utilizados automáticamente
       const fondosUtilizados = eventos.reduce(
         (sum, e) => sum + (e.presupuesto_actual || 0),
         0
       );
 
-      // 🔹 Fechas de referencia
+      // 🔹 Fechas para eventos recientes
       const hoy = new Date();
       const hace30 = new Date(hoy);
       const dentro30 = new Date(hoy);
       hace30.setDate(hoy.getDate() - 30);
       dentro30.setDate(hoy.getDate() + 30);
 
-      // 🔹 Eventos recientes (últimos 30 días y próximos 30 días)
+      // 🔹 Eventos recientes
       const { data: recientes } = await supabase
         .from("eventos")
         .select(
@@ -81,7 +90,7 @@ export default function DashboardAdmin() {
         .order("fecha", { ascending: true })
         .limit(5);
 
-      // 🔹 Notificaciones: próximos 7 días, cancelados o completados
+      // 🔹 Notificaciones
       const notificacionesTemp = [];
       eventos.forEach((e) => {
         const fecha = new Date(e.fecha);
@@ -101,7 +110,7 @@ export default function DashboardAdmin() {
       setMetricas({
         totalEventos: eventos.length,
         totalParticipantes,
-        presupuestoTotal,
+        presupuestoTotal: config?.presupuesto_general || 0,
         fondosUtilizados,
       });
       setEventosRecientes(recientes || []);
@@ -110,6 +119,26 @@ export default function DashboardAdmin() {
       console.error("Error al cargar dashboard:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 🔹 Guardar presupuesto manual en tabla configuracion
+  const guardarPresupuesto = async () => {
+    try {
+      const { error } = await supabase
+        .from("configuracion")
+        .update({ presupuesto_general: nuevoPresupuesto })
+        .eq("id", 1);
+
+      if (error) throw error;
+
+      setMetricas((prev) => ({
+        ...prev,
+        presupuestoTotal: nuevoPresupuesto,
+      }));
+      setOpened(false);
+    } catch (error) {
+      console.error("Error actualizando presupuesto:", error.message);
     }
   };
 
@@ -134,8 +163,9 @@ export default function DashboardAdmin() {
         </Button>
       </Group>
 
-      {/* Métricas */}
+      {/* Métricas principales */}
       <Grid mb="lg">
+        {/* Total Eventos */}
         <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
           <Paper shadow="sm" p="md" radius="md" withBorder>
             <Group align="center">
@@ -150,6 +180,7 @@ export default function DashboardAdmin() {
           </Paper>
         </Grid.Col>
 
+        {/* Participantes */}
         <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
           <Paper shadow="sm" p="md" radius="md" withBorder>
             <Group align="center">
@@ -164,22 +195,37 @@ export default function DashboardAdmin() {
           </Paper>
         </Grid.Col>
 
+        {/* Presupuesto total editable */}
         <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
           <Paper shadow="sm" p="md" radius="md" withBorder>
-            <Group align="center">
-              <IconMoneybag size={28} />
-              <div>
-                <Text size="sm" c="dimmed">
-                  Presupuesto Total
-                </Text>
-                <Title order={3}>
-                  Q{metricas.presupuestoTotal.toLocaleString()}
-                </Title>
-              </div>
+            <Group align="center" justify="space-between">
+              <Group align="center">
+                <IconMoneybag size={28} />
+                <div>
+                  <Text size="sm" c="dimmed">
+                    Presupuesto Total
+                  </Text>
+                  <Title order={3}>
+                    Q{metricas.presupuestoTotal.toLocaleString()}
+                  </Title>
+                </div>
+              </Group>
+              <Button
+                size="xs"
+                variant="subtle"
+                leftSection={<IconEdit size={14} />}
+                onClick={() => {
+                  setNuevoPresupuesto(metricas.presupuestoTotal);
+                  setOpened(true);
+                }}
+              >
+                Editar
+              </Button>
             </Group>
           </Paper>
         </Grid.Col>
 
+        {/* Fondos utilizados */}
         <Grid.Col span={{ base: 12, sm: 6, md: 3 }}>
           <Paper shadow="sm" p="md" radius="md" withBorder>
             <Group align="center">
@@ -197,6 +243,31 @@ export default function DashboardAdmin() {
         </Grid.Col>
       </Grid>
 
+      {/* Modal de edición */}
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title="Editar Presupuesto General"
+        centered
+      >
+        <NumberInput
+          label="Nuevo presupuesto (Q)"
+          value={nuevoPresupuesto}
+          onChange={setNuevoPresupuesto}
+          thousandSeparator
+          min={0}
+        />
+        <Group justify="flex-end" mt="md">
+          <Button variant="default" onClick={() => setOpened(false)}>
+            Cancelar
+          </Button>
+          <Button color="blue" onClick={guardarPresupuesto}>
+            Guardar
+          </Button>
+        </Group>
+      </Modal>
+
+      {/* Resto de la estructura */}
       <Grid>
         {/* Eventos recientes */}
         <Grid.Col span={{ base: 12, md: 8 }}>
@@ -236,10 +307,12 @@ export default function DashboardAdmin() {
                       </div>
                       <div>
                         <Text size="sm">
-                          {evento.participantes_actual}/{evento.participantes_max} participantes
+                          {evento.participantes_actual}/
+                          {evento.participantes_max} participantes
                         </Text>
                         <Text fw={600}>
-                          Q{evento.presupuesto_actual || 0} / Q{evento.presupuesto_max || 0}
+                          Q{evento.presupuesto_actual || 0} / Q
+                          {evento.presupuesto_max || 0}
                         </Text>
                       </div>
                     </Group>
@@ -264,14 +337,7 @@ export default function DashboardAdmin() {
               </Title>
               {notificaciones.length > 0 ? (
                 notificaciones.map((n, i) => (
-                  <Paper
-                    key={i}
-                    p="xs"
-                    mb="xs"
-                    radius="md"
-                    withBorder
-                    bg="blue.1"
-                  >
+                  <Paper key={i} p="xs" mb="xs" radius="md" withBorder bg="blue.1">
                     <Text size="sm">{n}</Text>
                   </Paper>
                 ))
