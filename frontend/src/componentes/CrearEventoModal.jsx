@@ -37,8 +37,12 @@ export default function CrearEventoModal({
         fecha: eventoEditar.fecha ? new Date(eventoEditar.fecha) : null,
         hora: eventoEditar.hora || "",
         lugar: eventoEditar.ubicacion || "",
-        participantes_max: eventoEditar.participantes_max || eventoEditar.cupo_maximo || 0,
-        presupuesto_max: eventoEditar.presupuesto_max || eventoEditar.presupuesto || 0,
+        participantes_max:
+          eventoEditar.participantes_max || eventoEditar.cupo_maximo || 0,
+        presupuesto_max:
+          eventoEditar.presupuesto_max ||
+          eventoEditar.presupuesto_maximo ||
+          0,
         presupuesto_actual: eventoEditar.presupuesto_actual ?? 0,
         categoria: eventoEditar.categoria || "",
       });
@@ -57,25 +61,48 @@ export default function CrearEventoModal({
     }
   }, [eventoEditar, opened]);
 
+  // 🔹 Guardar o actualizar evento
   const handleSubmit = async () => {
-    const evento = {
-      titulo: form.titulo,
-      descripcion: form.descripcion,
-      fecha: form.fecha ? dayjs(form.fecha).format("YYYY-MM-DD") : null,
-      hora: form.hora ? dayjs(`2000-01-01T${form.hora}`).format("HH:mm:ss") : null,
-      ubicacion: form.lugar,
-      cupo_maximo: form.participantes_max,
-      participantes_max: form.participantes_max,
-      presupuesto_max: form.presupuesto_max,
-      presupuesto_actual:
-        form.presupuesto_actual === undefined || form.presupuesto_actual === null
-          ? 0
-          : form.presupuesto_actual,
-      categoria: form.categoria,
-      estado: "Activo",
-    };
-
     try {
+      // Obtener usuario logueado
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      // Buscar en tabla usuarios para obtener id y rol
+      const { data: usuarioData, error: userError } = await supabase
+        .from("usuarios")
+        .select("id, rol")
+        .eq("auth_id", user?.id)
+        .single();
+
+      if (userError) throw userError;
+
+      const evento = {
+        titulo: form.titulo,
+        descripcion: form.descripcion,
+        fecha: form.fecha ? dayjs(form.fecha).format("YYYY-MM-DD") : null,
+        hora: form.hora
+          ? dayjs(`2000-01-01T${form.hora}`).format("HH:mm:ss")
+          : null,
+        ubicacion: form.lugar,
+        cupo_maximo: form.participantes_max,
+        participantes_max: form.participantes_max,
+        presupuesto_max: form.presupuesto_max,
+        presupuesto_actual:
+          form.presupuesto_actual === undefined ||
+          form.presupuesto_actual === null
+            ? 0
+            : form.presupuesto_actual,
+        categoria: form.categoria,
+        estado: "Activo",
+      };
+
+      // 🔹 Si el usuario es coordinador, se guarda su ID
+      if (usuarioData?.rol === "Coordinador") {
+        evento.coordinador_id = usuarioData.id;
+      }
+
       let error;
 
       if (eventoEditar && eventoEditar.id) {
