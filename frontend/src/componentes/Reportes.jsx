@@ -39,6 +39,7 @@ export default function Reportes() {
   const [loading, setLoading] = useState(true);
   const [periodo, setPeriodo] = useState("");
   const [categoria, setCategoria] = useState("");
+  const [presupuestoGeneral, setPresupuestoGeneral] = useState(0); // 🔹 NUEVO
 
   // 🔹 Traer datos desde Supabase
   const fetchEventos = async () => {
@@ -56,6 +57,17 @@ export default function Reportes() {
 
       const { data, error } = await query;
       if (error) throw error;
+
+      // 🔹 Obtener presupuesto general igual que en DashboardAdmin
+      const { data: config, error: configError } = await supabase
+        .from("configuracion")
+        .select("presupuesto_general")
+        .eq("id", 1)
+        .single();
+
+      if (!configError && config) {
+        setPresupuestoGeneral(config.presupuesto_general || 0);
+      }
 
       setEventos(data || []);
     } catch (err) {
@@ -97,10 +109,8 @@ export default function Reportes() {
   const promedioAsistenciaNum =
     totalCapacidad > 0 ? (totalParticipantes / totalCapacidad) * 100 : 0;
 
-  const presupuestoTotal = eventos.reduce(
-    (sum, e) => sum + Number(e.presupuesto_max || e.presupuesto || 0),
-    0
-  );
+  // 🔹 Presupuesto Total ahora viene del dashboard (tabla configuracion)
+  const presupuestoTotal = presupuestoGeneral || 0;
 
   const fondosEjecutados = eventos.reduce(
     (sum, e) => sum + Number(e.presupuesto_actual || 0),
