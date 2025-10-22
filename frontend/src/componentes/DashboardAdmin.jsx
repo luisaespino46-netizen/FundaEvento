@@ -22,8 +22,12 @@ import {
   IconReport,
   IconEdit,
 } from "@tabler/icons-react";
+import { useNavigate } from "react-router-dom";
+import CrearEventoModal from "./CrearEventoModal";
 
 export default function DashboardAdmin() {
+  const navigate = useNavigate();
+
   const [loading, setLoading] = useState(true);
   const [metricas, setMetricas] = useState({
     totalEventos: 0,
@@ -34,9 +38,12 @@ export default function DashboardAdmin() {
   const [eventosRecientes, setEventosRecientes] = useState([]);
   const [notificaciones, setNotificaciones] = useState([]);
 
-  // 🔹 Para modal de edición de presupuesto
+  // 🔹 Modal de edición de presupuesto
   const [opened, setOpened] = useState(false);
   const [nuevoPresupuesto, setNuevoPresupuesto] = useState(0);
+
+  // 🔹 Modal de creación de evento
+  const [crearAbierto, setCrearAbierto] = useState(false);
 
   useEffect(() => {
     fetchDatos();
@@ -158,7 +165,7 @@ export default function DashboardAdmin() {
           <Title order={2}>Dashboard</Title>
           <Text c="dimmed">Resumen general de FUNDAEVENTO</Text>
         </div>
-        <Button variant="filled" color="blue">
+        <Button variant="filled" color="blue" onClick={() => setCrearAbierto(true)}>
           + Nuevo Evento
         </Button>
       </Group>
@@ -243,7 +250,7 @@ export default function DashboardAdmin() {
         </Grid.Col>
       </Grid>
 
-      {/* Modal de edición */}
+      {/* Modal de edición de presupuesto */}
       <Modal
         opened={opened}
         onClose={() => setOpened(false)}
@@ -267,6 +274,13 @@ export default function DashboardAdmin() {
         </Group>
       </Modal>
 
+      {/* Modal de crear evento */}
+      <CrearEventoModal
+        opened={crearAbierto}
+        onClose={() => setCrearAbierto(false)}
+        onEventoCreado={fetchDatos}
+      />
+
       {/* Resto de la estructura */}
       <Grid>
         {/* Eventos recientes */}
@@ -274,7 +288,7 @@ export default function DashboardAdmin() {
           <Paper p="md" radius="md" shadow="sm" withBorder>
             <Group justify="space-between" mb="md">
               <Title order={4}>Eventos Recientes</Title>
-              <Button size="xs" variant="light">
+              <Button size="xs" variant="light" onClick={() => navigate("/eventos")}>
                 Ver Todos
               </Button>
             </Group>
@@ -354,8 +368,12 @@ export default function DashboardAdmin() {
                 Acciones Rápidas
               </Title>
               <Stack>
-                <Button variant="light">+ Crear Evento</Button>
-                <Button variant="light">📊 Generar Reporte</Button>
+                <Button variant="light" onClick={() => setCrearAbierto(true)}>
+                  + Crear Evento
+                </Button>
+                <Button variant="light" onClick={() => navigate("/reportes")}>
+                  📊 Generar Reporte
+                </Button>
               </Stack>
             </Paper>
           </Stack>
