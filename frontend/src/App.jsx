@@ -6,8 +6,10 @@ import Dashboard from "./componentes/Dashboard";
 import Eventos from "./componentes/Eventos";
 import Calendario from "./componentes/Calendario";
 import Usuarios from "./componentes/Usuarios";
-import Reportes from "./componentes/Reportes";
 import ProtectedRoute from "./auth/ProtectedRoute";
+
+// 🔹 Importamos los componentes de reportes
+import ReportesSwitch from "./componentes/ReportesSwitch"; // ✅ Detecta rol y muestra el reporte correcto
 
 export default function App() {
   return (
@@ -64,12 +66,12 @@ export default function App() {
             }
           />
 
-          {/* 🔹 Visible para Admin y Coordinador */}
+          {/* 🔹 Ruta de reportes (Admin y Coordinador comparten la misma) */}
           <Route
             path="reportes"
             element={
               <ProtectedRoute roles={["Admin", "Coordinador"]}>
-                <Reportes />
+                <ReportesSwitch /> {/* 👈 Automáticamente muestra el reporte correcto */}
               </ProtectedRoute>
             }
           />
