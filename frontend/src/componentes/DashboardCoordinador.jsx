@@ -1,59 +1,107 @@
 // src/componentes/DashboardCoordinador.jsx
-import { useState, useEffect } from "react";
 import {
+  Grid,
+  Paper,
   Title,
   Text,
-  Paper,
-  Group,
-  Grid,
-  Button,
   Badge,
+  Group,
+  Button,
+  Stack,
+  Loader,
+  Center,
 } from "@mantine/core";
-import { IconCalendar, IconPlus } from "@tabler/icons-react";
 import { supabase } from "../supabase";
-import CrearEventoModal from "./CrearEventoModal";
+import { useEffect, useState } from "react";
+import {
+  IconCalendarEvent,
+  IconUsers,
+  IconMoneybag,
+} from "@tabler/icons-react";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
+import CrearEventoModal from "./CrearEventoModal";
 
 export default function DashboardCoordinador() {
-  const { profile } = useAuth();
   const navigate = useNavigate();
-  const [eventos, setEventos] = useState([]);
-  const [opened, setOpened] = useState(false);
-  const [fondosEjecutados, setFondosEjecutados] = useState(0);
+  const { profile } = useAuth();
 
-  const fetchEventos = async () => {
+  const [loading, setLoading] = useState(true);
+  const [metricas, setMetricas] = useState({
+    totalEventos: 0,
+    totalParticipantes: 0,
+    fondosEjecutados: 0,
+  });
+  const [eventosRecientes, setEventosRecientes] = useState([]);
+
+  // 🔹 Modal crear evento
+  const [crearAbierto, setCrearAbierto] = useState(false);
+
+  useEffect(() => {
+    if (profile) fetchDatos();
+  }, [profile]);
+
+  const fetchDatos = async () => {
     try {
-      if (!profile) return;
-      const { data: usuario } = await supabase
+      setLoading(true);
+
+      // 🔹 Obtener ID del usuario coordinador
+      const { data: usuario, error: userError } = await supabase
         .from("usuarios")
         .select("id")
-        .eq("auth_id", profile.auth_id)
+        .eq("auth_id", profile?.auth_id)
         .single();
+      if (userError) throw userError;
 
-      const { data: eventosData } = await supabase
+      // 🔹 Obtener eventos coordinados por él
+      const { data: eventos, error: eventosError } = await supabase
         .from("eventos")
-        .select("*")
-        .eq("coordinador_id", usuario.id);
+        .select(
+          "id, titulo, estado, categoria, fecha, ubicacion, participantes_actual, participantes_max, presupuesto_actual, presupuesto_max"
+        )
+        .eq("coordinador_id", usuario.id)
+        .order("fecha", { ascending: true });
 
-      setEventos(eventosData || []);
-      const totalFondos =
-        eventosData?.reduce(
-          (acc, ev) => acc + (ev.presupuesto_actual || 0),
-          0
-        ) || 0;
-      setFondosEjecutados(totalFondos);
+      if (eventosError) throw eventosError;
+
+      // 🔹 Calcular métricas
+      const totalEventos = eventos.length;
+      const totalParticipantes = eventos.reduce(
+        (sum, e) => sum + (e.participantes_actual || 0),
+        0
+      );
+      const fondosEjecutados = eventos.reduce(
+        (sum, e) => sum + (e.presupuesto_actual || 0),
+        0
+      );
+
+      // 🔹 Mostrar solo los últimos 5 eventos recientes
+      const recientes = eventos.slice(0, 5);
+
+      setMetricas({
+        totalEventos,
+        totalParticipantes,
+        fondosEjecutados,
+      });
+      setEventosRecientes(recientes);
     } catch (error) {
-      console.error("Error al traer eventos:", error.message);
+      console.error("❌ Error cargando dashboard del coordinador:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchEventos();
-  }, [profile]);
+  if (loading) {
+    return (
+      <Center style={{ height: "70vh" }}>
+        <Loader color="blue" size="lg" />
+      </Center>
+    );
+  }
 
   return (
     <div>
+      {/* Header interno */}
       <Group justify="space-between" mb="lg">
         <div>
           <Title order={2}>Dashboard del Coordinador</Title>
@@ -61,111 +109,148 @@ export default function DashboardCoordinador() {
             Resumen de tus eventos coordinados y métricas personales
           </Text>
         </div>
-        {/* 🔹 Eliminado el botón superior de Crear Evento */}
+        <Button variant="filled" color="blue" onClick={() => setCrearAbierto(true)}>
+          + Crear Evento
+        </Button>
       </Group>
 
+      {/* Métricas principales */}
       <Grid mb="lg">
-        <Grid.Col span={{ base: 12, sm: 4 }}>
-          <Paper withBorder p="md" radius="md">
-            <Text fw={700} size="lg">
-              {eventos.length}
-            </Text>
-            <Text size="sm" c="dimmed">
-              Total Eventos
-            </Text>
-          </Paper>
-        </Grid.Col>
-
-        <Grid.Col span={{ base: 12, sm: 4 }}>
-          <Paper withBorder p="md" radius="md">
-            <Text fw={700} size="lg">
-              0
-            </Text>
-            <Text size="sm" c="dimmed">
-              Participantes Totales
-            </Text>
-          </Paper>
-        </Grid.Col>
-
-        <Grid.Col span={{ base: 12, sm: 4 }}>
-          <Paper withBorder p="md" radius="md">
-            <Text fw={700} size="lg">
-              Q{fondosEjecutados.toLocaleString()}
-            </Text>
-            <Text size="sm" c="dimmed">
-              Fondos Ejecutados
-            </Text>
-          </Paper>
-        </Grid.Col>
-      </Grid>
-
-      <Title order={4} mb="xs">
-        Tus Eventos Recientes
-      </Title>
-      {eventos.length === 0 ? (
-        <Text c="dimmed">No tienes eventos recientes.</Text>
-      ) : (
-        eventos.slice(0, 3).map((evento) => (
-          <Paper key={evento.id} withBorder p="md" mb="sm" radius="md">
-            <Group justify="space-between">
+        {/* Total Eventos */}
+        <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+          <Paper shadow="sm" p="md" radius="md" withBorder>
+            <Group align="center">
+              <IconCalendarEvent size={28} />
               <div>
-                <Text fw={600}>{evento.titulo}</Text>
                 <Text size="sm" c="dimmed">
-                  {evento.fecha} - {evento.ubicacion || "Ubicación no especificada"}
+                  Total Eventos
                 </Text>
-                <Group mt={4}>
-                  <Badge color="blue" variant="light">
-                    {evento.categoria}
-                  </Badge>
-                  <Badge color="green" variant="filled">
-                    {evento.estado || "Activo"}
-                  </Badge>
-                </Group>
+                <Title order={3}>{metricas.totalEventos}</Title>
               </div>
-              <Text fw={500}>
-                Q{evento.presupuesto_actual} / Q{evento.presupuesto_max}
-              </Text>
             </Group>
           </Paper>
-        ))
-      )}
+        </Grid.Col>
 
-      <Grid mt="md">
-        <Grid.Col span={{ base: 12, sm: 6 }}>
-          <Paper withBorder p="md" radius="md">
-            <Text fw={600} mb="sm">
-              Acciones Rápidas
-            </Text>
+        {/* Participantes */}
+        <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+          <Paper shadow="sm" p="md" radius="md" withBorder>
+            <Group align="center">
+              <IconUsers size={28} />
+              <div>
+                <Text size="sm" c="dimmed">
+                  Participantes Totales
+                </Text>
+                <Title order={3}>{metricas.totalParticipantes}</Title>
+              </div>
+            </Group>
+          </Paper>
+        </Grid.Col>
 
-            <Button
-              leftSection={<IconPlus size={16} />}
-              fullWidth
-              color="blue"
-              mb="sm"
-              onClick={() => setOpened(true)} // 🔹 Abre el modal
-            >
-              + Crear Evento
-            </Button>
-
-            <Button
-              leftSection={<IconCalendar size={16} />}
-              fullWidth
-              color="green"
-              variant="light"
-              onClick={() => navigate("/calendario")} // 🔹 Ir al calendario
-            >
-              Ver Calendario
-            </Button>
+        {/* Fondos Ejecutados */}
+        <Grid.Col span={{ base: 12, sm: 6, md: 4 }}>
+          <Paper shadow="sm" p="md" radius="md" withBorder>
+            <Group align="center">
+              <IconMoneybag size={28} />
+              <div>
+                <Text size="sm" c="dimmed">
+                  Fondos Ejecutados
+                </Text>
+                <Title order={3}>
+                  Q{metricas.fondosEjecutados.toLocaleString()}
+                </Title>
+              </div>
+            </Group>
           </Paper>
         </Grid.Col>
       </Grid>
 
-      {/* 🔹 Modal de creación de evento */}
+      {/* Modal de creación */}
       <CrearEventoModal
-        opened={opened}
-        onClose={() => setOpened(false)}
-        onEventoCreado={fetchEventos}
+        opened={crearAbierto}
+        onClose={() => setCrearAbierto(false)}
+        onEventoCreado={fetchDatos}
       />
+
+      {/* Eventos recientes */}
+      <Grid>
+        <Grid.Col span={{ base: 12, md: 8 }}>
+          <Paper p="md" radius="md" shadow="sm" withBorder>
+            <Group justify="space-between" mb="md">
+              <Title order={4}>Tus Eventos Recientes</Title>
+              <Button size="xs" variant="light" onClick={() => navigate("/eventos")}>
+                Ver Todos
+              </Button>
+            </Group>
+
+            <Stack>
+              {eventosRecientes.length > 0 ? (
+                eventosRecientes.map((evento) => (
+                  <Paper key={evento.id} withBorder p="sm" radius="md">
+                    <Group justify="space-between">
+                      <div>
+                        <Text fw={600}>{evento.titulo}</Text>
+                        <Text size="xs" c="dimmed">
+                          {new Date(evento.fecha).toLocaleDateString()} -{" "}
+                          {evento.ubicacion || "Ubicación no especificada"}
+                        </Text>
+                        <Group gap="xs" mt="xs">
+                          <Badge color="blue">{evento.categoria}</Badge>
+                          <Badge
+                            color={
+                              evento.estado === "Activo"
+                                ? "green"
+                                : evento.estado === "Cancelado"
+                                ? "red"
+                                : "gray"
+                            }
+                          >
+                            {evento.estado}
+                          </Badge>
+                        </Group>
+                      </div>
+                      <div>
+                        <Text size="sm">
+                          {evento.participantes_actual}/{evento.participantes_max}{" "}
+                          participantes
+                        </Text>
+                        <Text fw={600}>
+                          Q{evento.presupuesto_actual || 0} / Q
+                          {evento.presupuesto_max || 0}
+                        </Text>
+                      </div>
+                    </Group>
+                  </Paper>
+                ))
+              ) : (
+                <Text size="sm" c="dimmed">
+                  No hay eventos recientes.
+                </Text>
+              )}
+            </Stack>
+          </Paper>
+        </Grid.Col>
+
+        {/* Acciones rápidas */}
+        <Grid.Col span={{ base: 12, md: 4 }}>
+          <Paper p="md" withBorder radius="md" shadow="sm">
+            <Title order={5} mb="sm">
+              Acciones Rápidas
+            </Title>
+            <Stack>
+              <Button variant="light" onClick={() => setCrearAbierto(true)}>
+                + Crear Evento
+              </Button>
+              <Button
+                variant="light"
+                color="green"
+                onClick={() => navigate("/calendario")}
+              >
+                📅 Ver Calendario
+              </Button>
+            </Stack>
+          </Paper>
+        </Grid.Col>
+      </Grid>
     </div>
   );
 }
