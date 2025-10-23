@@ -7,6 +7,11 @@ import {
   Button,
   Title,
   Text,
+  Group,
+  Image,
+  Stack,
+  Center,
+  Divider,
 } from "@mantine/core";
 import { useNavigate } from "react-router-dom";
 
@@ -38,52 +43,93 @@ export default function Login() {
   };
 
   return (
-    <div className="relative w-screen h-screen bg-gray-100">
-      <div
-        className="absolute left-1/2 top-[55%] transform -translate-x-1/2 -translate-y-1/2"
-      >
+    <Group
+      style={{
+        height: "100vh",
+        background: "linear-gradient(135deg, #f8fafc, #e2e8f0)",
+      }}
+      grow
+      spacing={0}
+    >
+      {/* Imagen del lado izquierdo */}
+      <Image
+        src="/fondo-login.jpg.gif"
+        alt="Login Fondo"
+        style={{
+          width: "50%",
+          height: "100%",
+          objectFit: "cover",
+        }}
+      />
+
+      {/* Sección derecha con el formulario */}
+      <Center style={{ width: "50%", height: "100%" }}>
         <Paper
           withBorder
-          shadow="lg"
-          p="xl"
+          shadow="xl"
           radius="lg"
+          p="3rem"
           style={{
-            width: 400,
-            textAlign: "center",
+            maxWidth: 520, // 🔹 Cuadro más ancho
+            width: "100%",
+            backgroundColor: "white",
           }}
         >
-          <Title order={2} mb="lg">
-            Iniciar Sesión
-          </Title>
+          <Stack align="center" spacing="xs">
+            <Title order={2} c="blue" mb="xs">
+              FUNDAEVENTO
+            </Title>
+            <Text size="sm" c="dimmed" ta="center" fw={500}>
+              "Inspirando cambios, impulsando comunidad.  
+              Juntos hacemos la diferencia."
+            </Text>
+            <Divider my="sm" style={{ width: "70%" }} />
+            <Text size="sm" c="dimmed" mb="md" ta="center">
+              Ingresa tus credenciales para acceder al sistema de gestión.
+            </Text>
+          </Stack>
 
           {error && (
-            <Text c="red" size="sm" mb="sm">
+            <Text c="red" size="sm" mb="sm" ta="center">
               {error}
             </Text>
           )}
 
           <form onSubmit={handleLogin}>
-            <TextInput
-              label="Correo electrónico"
-              placeholder="admin@fundaevento.com"
-              value={email}
-              onChange={(e) => setEmail(e.currentTarget.value)}
-              required
-            />
-            <PasswordInput
-              label="Contraseña"
-              placeholder="********"
-              mt="md"
-              value={password}
-              onChange={(e) => setPassword(e.currentTarget.value)}
-              required
-            />
-            <Button type="submit" fullWidth mt="lg" loading={loading}>
-              Entrar
-            </Button>
+            <Stack>
+              <TextInput
+                label="Correo electrónico"
+                placeholder="usuario@fundaevento.com"
+                value={email}
+                onChange={(e) => setEmail(e.currentTarget.value)}
+                required
+              />
+              <PasswordInput
+                label="Contraseña"
+                placeholder="********"
+                value={password}
+                onChange={(e) => setPassword(e.currentTarget.value)}
+                required
+              />
+              <Button
+                type="submit"
+                fullWidth
+                mt="md"
+                loading={loading}
+                color="blue"
+                size="md"
+                radius="md"
+              >
+                Iniciar Sesión
+              </Button>
+            </Stack>
           </form>
+
+          <Text size="xs" mt="md" ta="center" c="dimmed">
+            © 2025 FUNDAEVENTO — Sistema de Gestión
+          </Text>
         </Paper>
-      </div>
-    </div>
+      </Center>
+    </Group>
   );
 }
