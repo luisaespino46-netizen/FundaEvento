@@ -3,7 +3,7 @@ import {
   Modal,
   TextInput,
   NumberInput,
-  Autocomplete,
+  Select,
   Button,
   Group,
   Loader,
@@ -11,7 +11,6 @@ import {
 import { DateInput, TimeInput } from "@mantine/dates";
 import dayjs from "dayjs";
 import { supabase } from "../supabase";
-import { useAuth } from "../hooks/useAuth";
 
 export default function CrearEventoModal({
   opened,
@@ -19,8 +18,6 @@ export default function CrearEventoModal({
   onEventoCreado,
   eventoEditar,
 }) {
-  const { profile } = useAuth();
-
   const [form, setForm] = useState({
     titulo: "",
     descripcion: "",
@@ -35,10 +32,6 @@ export default function CrearEventoModal({
 
   const [categorias, setCategorias] = useState([]);
   const [loadingCategorias, setLoadingCategorias] = useState(false);
-  const [categoriaNueva, setCategoriaNueva] = useState("");
-
-  const esAdminOCoor =
-    profile?.rol === "Admin" || profile?.rol === "Coordinador";
 
   // 🔹 Cargar categorías desde Supabase
   const cargarCategorias = async () => {
@@ -47,9 +40,10 @@ export default function CrearEventoModal({
       const { data, error } = await supabase
         .from("categorias")
         .select("id, nombre")
+        .eq("estado", true)
         .order("nombre", { ascending: true });
       if (error) throw error;
-      setCategorias(data?.map((c) => c.nombre) || []);
+      setCategorias(data || []);
     } catch (err) {
       console.error("Error al cargar categorías:", err);
     } finally {
@@ -61,56 +55,6 @@ export default function CrearEventoModal({
     cargarCategorias();
   }, []);
 
-  // 🔹 Crear nueva categoría
-  const crearNuevaCategoria = async () => {
-    const nombreCategoria = categoriaNueva.trim();
-    if (!nombreCategoria) {
-      alert("Escribe un nombre de categoría");
-      return;
-    }
-
-    if (categorias.some((c) => c.toLowerCase() === nombreCategoria.toLowerCase())) {
-      setForm((p) => ({ ...p, categoria: nombreCategoria }));
-      alert("La categoría ya existe, seleccionada automáticamente ✅");
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from("categorias")
-        .insert([
-          {
-            nombre: nombreCategoria,
-            descripcion: "",
-            estado: true,
-            usuario_creacion: profile?.correo || "admin",
-            fecha_creacion: new Date().toISOString(),
-            usuario_modificacion: null,
-            fecha_modificacion: null,
-          },
-        ])
-        .select("nombre");
-
-      if (error) {
-        console.error("❌ Error en inserción:", error);
-        alert("No se pudo crear la categoría ❌");
-        return;
-      }
-
-      if (data && data.length > 0) {
-        const nueva = data[0].nombre;
-        setCategorias((prev) => [...prev, nueva]);
-        setForm((prev) => ({ ...prev, categoria: nueva }));
-        setCategoriaNueva("");
-        alert(`Categoría "${nueva}" creada correctamente ✅`);
-      }
-    } catch (err) {
-      console.error("❌ Error general al crear categoría:", err);
-      alert("Error general al crear la categoría ❌");
-    }
-  };
-
-  // 🔹 Prellenar formulario si se edita evento
   useEffect(() => {
     if (eventoEditar) {
       setForm({
@@ -128,7 +72,6 @@ export default function CrearEventoModal({
         presupuesto_actual: eventoEditar.presupuesto_actual ?? 0,
         categoria: eventoEditar.categoria || "",
       });
-      setCategoriaNueva("");
     } else {
       setForm({
         titulo: "",
@@ -141,9 +84,28 @@ export default function CrearEventoModal({
         presupuesto_actual: 0,
         categoria: "",
       });
-      setCategoriaNueva("");
     }
   }, [eventoEditar, opened]);
+
+  // 🔹 Crear nueva categoría directamente desde el select
+  const crearNuevaCategoria = async (nombreCategoria) => {
+    try {
+      const { data, error } = await supabase
+        .from("categorias")
+        .insert([{ nombre: nombreCategoria, estado: true }])
+        .select("nombre")
+        .single();
+
+      if (error) throw error;
+
+      // agregar la nueva al listado
+      setCategorias((prev) => [...prev, data]);
+      setForm((prev) => ({ ...prev, categoria: data.nombre }));
+    } catch (err) {
+      console.error("❌ Error al crear categoría:", err);
+      alert("No se pudo crear la categoría");
+    }
+  };
 
   // 🔹 Guardar o actualizar evento
   const handleSubmit = async () => {
@@ -199,7 +161,7 @@ export default function CrearEventoModal({
       }
 
       if (error) throw error;
-      onEventoCreado?.();
+      if (onEventoCreado) onEventoCreado();
       onClose();
     } catch (err) {
       console.error("❌ ERROR Supabase:", err);
@@ -271,35 +233,31 @@ export default function CrearEventoModal({
         />
       </Group>
 
-      {/* 🔹 Autocomplete + botón para crear nueva categoría */}
-      <Group align="end" gap="sm" mb="md" grow>
-        <Autocomplete
-          label="Categoría"
-          placeholder="Selecciona o escribe una categoría"
-          data={categorias}
-          value={form.categoria}
-          onChange={(value) => {
+      <Select
+        label="Categoría"
+        placeholder="Selecciona o crea una categoría"
+        searchable
+        nothingfound="Sin categorías"
+        rightSection={loadingCategorias ? <Loader size={16} /> : null}
+        data={categorias.map((c) => ({ value: c.nombre, label: c.nombre }))}
+        value={form.categoria}
+        onChange={(value) => {
+          if (!value) return;
+          const existe = categorias.some(
+            (c) => c.nombre.toLowerCase() === value.toLowerCase()
+          );
+          if (!existe) {
+            if (confirm(`¿Crear nueva categoría "${value}"?`)) {
+              crearNuevaCategoria(value);
+            }
+          } else {
             setForm({ ...form, categoria: value });
-            setCategoriaNueva(value);
-          }}
-          rightSection={loadingCategorias ? <Loader size={16} /> : null}
-        />
-
-        {esAdminOCoor ? (
-          <Button
-            onClick={crearNuevaCategoria}
-            disabled={!categoriaNueva.trim()}
-            variant="light"
-            color="green"
-          >
-            + Agregar
-          </Button>
-        ) : (
-          <Button disabled variant="light">
-            + Agregar
-          </Button>
-        )}
-      </Group>
+          }
+        }}
+        creatable
+        getCreateLabel={(query) => `➕ Crear nueva categoría: "${query}"`}
+        mb="md"
+      />
 
       <Group justify="flex-end">
         <Button variant="default" onClick={onClose}>
