@@ -45,17 +45,17 @@ export default function DashboardParticipante() {
       const usuarioUuid = profile?.auth_id;
       if (!usuarioUuid) throw new Error("No se encontró el UUID del usuario.");
 
-      // 🔹 Buscar los eventos en los que está inscrito (usando el UUID)
+      // 🔹 Buscar los eventos en los que está inscrito
       const { data: participaciones, error: partError } = await supabase
         .from("participantes")
         .select(
           "evento_id, eventos(id, titulo, estado, categoria, fecha, ubicacion)"
         )
-        .eq("usuario_id", usuarioUuid); // ✅ Corregido: antes usaba el id numérico
+        .eq("usuario_id", usuarioUuid);
 
       if (partError) throw partError;
 
-      // 🔹 Extraer los eventos asociados a las participaciones
+      // 🔹 Extraer los eventos asociados
       const eventos = (participaciones || [])
         .map((p) => p.eventos)
         .filter((e) => e !== null);
@@ -93,19 +93,12 @@ export default function DashboardParticipante() {
 
   return (
     <div>
-      {/* 🔹 Header */}
+      {/* 🔹 Header (sin el botón duplicado) */}
       <Group justify="space-between" mb="lg">
         <div>
           <Title order={2}>Dashboard del Participante</Title>
           <Text c="dimmed">Resumen de tus eventos inscritos y próximos</Text>
         </div>
-        <Button
-          variant="light"
-          color="green"
-          onClick={() => navigate("/calendario")}
-        >
-          📅 Ver Calendario
-        </Button>
       </Group>
 
       {/* 🔹 Métricas principales */}
