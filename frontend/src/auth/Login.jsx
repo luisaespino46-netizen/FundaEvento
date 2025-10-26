@@ -70,7 +70,7 @@ export default function Login() {
           radius="lg"
           p="3rem"
           style={{
-            maxWidth: 520, // 🔹 Cuadro más ancho
+            maxWidth: 520,
             width: "100%",
             backgroundColor: "white",
           }}
@@ -95,21 +95,21 @@ export default function Login() {
             </Text>
           )}
 
-          <form onSubmit={handleLogin}>
+          <form onSubmit={handleLogin} autoComplete="off">
             <Stack>
               <TextInput
                 label="Correo electrónico"
-                placeholder="usuario@fundaevento.com"
                 value={email}
                 onChange={(e) => setEmail(e.currentTarget.value)}
                 required
+                autoComplete="off"
               />
               <PasswordInput
                 label="Contraseña"
-                placeholder="********"
                 value={password}
                 onChange={(e) => setPassword(e.currentTarget.value)}
                 required
+                autoComplete="off"
               />
               <Button
                 type="submit"
