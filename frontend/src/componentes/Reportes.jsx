@@ -1,4 +1,3 @@
-// src/componentes/Reportes.jsx
 import { useState, useEffect } from "react";
 import {
   Title,
@@ -17,7 +16,7 @@ import {
 } from "@mantine/core";
 import { IconDownload } from "@tabler/icons-react";
 import { supabase } from "../supabase";
-import { utils, writeFile } from "xlsx"; // ✅ Import necesario para Excel
+import { utils, writeFile } from "xlsx";
 
 const formatMoney = (n = 0) =>
   `Q${Number(n || 0).toLocaleString("es-GT", { maximumFractionDigits: 0 })}`;
@@ -39,15 +38,16 @@ export default function Reportes() {
   const [loading, setLoading] = useState(true);
   const [periodo, setPeriodo] = useState("");
   const [categoria, setCategoria] = useState("");
-  const [presupuestoGeneral, setPresupuestoGeneral] = useState(0); // 🔹 NUEVO
+  const [presupuestoGeneral, setPresupuestoGeneral] = useState(0);
+  const [totalParticipantes, setTotalParticipantes] = useState(0); // ✅ Nuevo estado
 
   // 🔹 Traer datos desde Supabase
   const fetchEventos = async () => {
     try {
       setLoading(true);
 
+      // 🔹 Traer eventos
       let query = supabase.from("eventos").select("*");
-
       if (categoria) query = query.eq("categoria", categoria);
       if (periodo) {
         const inicio = `${periodo}-01-01`;
@@ -55,10 +55,10 @@ export default function Reportes() {
         query = query.gte("fecha", inicio).lte("fecha", fin);
       }
 
-      const { data, error } = await query;
+      const { data: eventosData, error } = await query;
       if (error) throw error;
 
-      // 🔹 Obtener presupuesto general igual que en DashboardAdmin
+      // 🔹 Traer configuración de presupuesto
       const { data: config, error: configError } = await supabase
         .from("configuracion")
         .select("presupuesto_general")
@@ -69,7 +69,15 @@ export default function Reportes() {
         setPresupuestoGeneral(config.presupuesto_general || 0);
       }
 
-      setEventos(data || []);
+      // 🔹 Traer participantes (conteo real)
+      const { count: participantesCount, error: participantesError } =
+        await supabase.from("participantes").select("id", { count: "exact" });
+
+      if (!participantesError) {
+        setTotalParticipantes(participantesCount || 0);
+      }
+
+      setEventos(eventosData || []);
     } catch (err) {
       console.error("❌ Error al cargar eventos:", err.message);
     } finally {
@@ -96,11 +104,7 @@ export default function Reportes() {
     (e) => (e.estado || e.estado_manual) === "Completado"
   ).length;
 
-  const totalParticipantes = eventos.reduce(
-    (sum, e) => sum + Number(e.participantes_actual || 0),
-    0
-  );
-
+  // ✅ Ahora usamos el total real de la tabla participantes
   const totalCapacidad = eventos.reduce(
     (sum, e) => sum + Number(e.participantes_max || 0),
     0
@@ -109,7 +113,6 @@ export default function Reportes() {
   const promedioAsistenciaNum =
     totalCapacidad > 0 ? (totalParticipantes / totalCapacidad) * 100 : 0;
 
-  // 🔹 Presupuesto Total ahora viene del dashboard (tabla configuracion)
   const presupuestoTotal = presupuestoGeneral || 0;
 
   const fondosEjecutados = eventos.reduce(
@@ -126,9 +129,7 @@ export default function Reportes() {
   const detalleEventos = eventos.map((e) => {
     const nombre = e.titulo || e.nombre || "Sin nombre";
     const fecha = safeDate(e.fecha);
-    const pAct = Number(e.participantes_actual || 0);
     const pMax = Number(e.participantes_max || 0);
-    const porcAsistencia = pMax > 0 ? (pAct / pMax) * 100 : 0;
     const presu = Number(e.presupuesto_max || e.presupuesto || 0);
     const gasto = Number(e.presupuesto_actual || 0);
     const eficiencia = presu > 0 ? (gasto / presu) * 100 : 0;
@@ -137,7 +138,7 @@ export default function Reportes() {
     return {
       Evento: nombre,
       Fecha: fecha,
-      Participantes: `${pAct}/${pMax} (${formatPercent(porcAsistencia)})`,
+      Participantes: `${pMax > 0 ? "—" : "—"}`,
       "Presupuesto Asignado (Q)": presu,
       "Fondos Gastados (Q)": gasto,
       Estado: estado,
@@ -173,7 +174,6 @@ export default function Reportes() {
 
   return (
     <div>
-      {/* Header */}
       <Group justify="space-between" mb="lg">
         <div>
           <Title order={2}>Reportes y Análisis</Title>
@@ -263,7 +263,7 @@ export default function Reportes() {
         </Grid.Col>
       </Grid>
 
-      {/* Bloques inferiores */}
+      {/* Transparencia y métricas */}
       <Grid>
         <Grid.Col span={6}>
           <Paper withBorder shadow="sm" radius="md" p="md" mb="lg">
@@ -311,7 +311,7 @@ export default function Reportes() {
         </Grid.Col>
       </Grid>
 
-      {/* Tabla */}
+      {/* Tabla de detalle */}
       <Paper withBorder shadow="sm" radius="md" p="md" mt="lg">
         <Title order={5} mb="sm">Detalle de Eventos</Title>
         <Table highlightOnHover withTableBorder>

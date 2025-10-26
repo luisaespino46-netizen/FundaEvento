@@ -15,7 +15,7 @@ import {
 import { IconDownload } from "@tabler/icons-react";
 import { supabase } from "../supabase";
 import { utils, writeFile } from "xlsx";
-import { useAuth } from "../hooks/useAuth"; // ✅ para obtener el usuario logueado
+import { useAuth } from "../hooks/useAuth";
 
 const formatMoney = (n = 0) =>
   `Q${Number(n || 0).toLocaleString("es-GT", { maximumFractionDigits: 0 })}`;
@@ -33,13 +33,14 @@ const safeDate = (raw) => {
 };
 
 export default function ReportesCoordinador() {
-  const { profile } = useAuth(); // obtenemos el usuario actual
+  const { profile } = useAuth();
   const [eventos, setEventos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [periodo, setPeriodo] = useState("");
   const [categoria, setCategoria] = useState("");
+  const [totalParticipantes, setTotalParticipantes] = useState(0); // ✅ Nuevo estado
 
-  // 🔹 Traer solo los eventos del coordinador actual
+  // 🔹 Traer eventos del coordinador actual y contar participantes
   const fetchEventos = async () => {
     try {
       setLoading(true);
@@ -49,6 +50,7 @@ export default function ReportesCoordinador() {
         return;
       }
 
+      // 🔹 Traer eventos donde el coordinador es el logueado
       let query = supabase.from("eventos").select("*").eq("coordinador_id", profile.id);
 
       if (categoria) query = query.eq("categoria", categoria);
@@ -58,10 +60,25 @@ export default function ReportesCoordinador() {
         query = query.gte("fecha", inicio).lte("fecha", fin);
       }
 
-      const { data, error } = await query;
+      const { data: eventosData, error } = await query;
       if (error) throw error;
 
-      setEventos(data || []);
+      // 🔹 Obtener los IDs de los eventos coordinados
+      const eventosIds = eventosData.map((e) => e.id);
+
+      // 🔹 Traer participantes solo de esos eventos
+      let totalCount = 0;
+      if (eventosIds.length > 0) {
+        const { count, error: participantesError } = await supabase
+          .from("participantes")
+          .select("id", { count: "exact" })
+          .in("evento_id", eventosIds);
+
+        if (!participantesError) totalCount = count || 0;
+      }
+
+      setTotalParticipantes(totalCount);
+      setEventos(eventosData || []);
     } catch (err) {
       console.error("❌ Error al cargar eventos:", err.message);
     } finally {
@@ -88,11 +105,7 @@ export default function ReportesCoordinador() {
     (e) => (e.estado || e.estado_manual) === "Completado"
   ).length;
 
-  const totalParticipantes = eventos.reduce(
-    (sum, e) => sum + Number(e.participantes_actual || 0),
-    0
-  );
-
+  // ✅ Reemplazamos el conteo local por el real
   const totalCapacidad = eventos.reduce(
     (sum, e) => sum + Number(e.participantes_max || 0),
     0
@@ -120,9 +133,7 @@ export default function ReportesCoordinador() {
   const detalleEventos = eventos.map((e) => {
     const nombre = e.titulo || e.nombre || "Sin nombre";
     const fecha = safeDate(e.fecha);
-    const pAct = Number(e.participantes_actual || 0);
     const pMax = Number(e.participantes_max || 0);
-    const porcAsistencia = pMax > 0 ? (pAct / pMax) * 100 : 0;
     const presu = Number(e.presupuesto_max || 0);
     const gasto = Number(e.presupuesto_actual || 0);
     const eficiencia = presu > 0 ? (gasto / presu) * 100 : 0;
@@ -131,7 +142,7 @@ export default function ReportesCoordinador() {
     return {
       Evento: nombre,
       Fecha: fecha,
-      Participantes: `${pAct}/${pMax} (${formatPercent(porcAsistencia)})`,
+      Participantes: `${pMax > 0 ? "—" : "—"}`,
       "Presupuesto Asignado (Q)": presu,
       "Fondos Gastados (Q)": gasto,
       Estado: estado,

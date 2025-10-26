@@ -28,7 +28,7 @@ export default function Eventos() {
   const [opened, setOpened] = useState(false);
   const [eventoEditando, setEventoEditando] = useState(null);
   const [usuarioId, setUsuarioId] = useState(null);
-  const [eventosInscritos, setEventosInscritos] = useState([]); // ✅ Nuevo estado
+  const [eventosInscritos, setEventosInscritos] = useState([]);
   const { profile } = useAuth();
 
   // 🔹 Obtener el ID real del usuario desde la tabla "usuarios"
@@ -42,24 +42,34 @@ export default function Eventos() {
     if (!error && data) setUsuarioId(data.id);
   };
 
-  // 🔹 Cargar eventos
+  // 🔹 Cargar eventos (con conteo de participantes)
   const fetchEventos = async () => {
     try {
       const { data, error } = await supabase
         .from("eventos")
-        .select("*, coordinador:coordinador_id(nombre, rol)")
+        .select(`
+          *,
+          coordinador:coordinador_id(nombre, rol),
+          participantes:participantes(id, estado)
+        `)
         .order("fecha", { ascending: true });
 
       if (error) throw error;
 
-      const normalizados = (data || []).map((e) => ({
-        ...e,
-        id: e.id || e.identificación,
-        titulo: e.titulo || e.título,
-        descripcion: e.descripcion || e.Descripción,
-        categoria: e.categoria || e.categorías,
-        presupuesto_max: e.presupuesto_max || e.presupuesto_máximo,
-      }));
+      const normalizados = (data || []).map((e) => {
+        const activos = (e.participantes || []).filter(
+          (p) => p.estado === "Inscrito"
+        ).length;
+        return {
+          ...e,
+          id: e.id || e.identificación,
+          titulo: e.titulo || e.título,
+          descripcion: e.descripcion || e.Descripción,
+          categoria: e.categoria || e.categorías,
+          presupuesto_max: e.presupuesto_max || e.presupuesto_máximo,
+          participantes_conteo: activos, // ✅ solo los inscritos activos
+        };
+      });
 
       setEventos(normalizados);
     } catch (err) {
@@ -74,7 +84,8 @@ export default function Eventos() {
     const { data, error } = await supabase
       .from("participantes")
       .select("evento_id")
-      .eq("usuario_id", profile.auth_id); // ✅ Usa el UUID correcto
+      .eq("usuario_id", profile.auth_id)
+      .eq("estado", "Inscrito"); // ✅ solo los activos
 
     if (!error && data) {
       const ids = data.map((p) => p.evento_id);
@@ -86,7 +97,7 @@ export default function Eventos() {
     if (profile) {
       obtenerUsuarioId();
       fetchEventos();
-      fetchEventosInscritos(); // ✅ También se carga aquí
+      fetchEventosInscritos();
     }
   }, [profile]);
 
@@ -116,7 +127,7 @@ export default function Eventos() {
           email: profile?.email,
           telefono: "—",
           evento_id: evento.id,
-          usuario_id: profile?.auth_id, // ✅ UUID real
+          usuario_id: profile?.auth_id,
           estado: "Inscrito",
           registrado_el: new Date(),
         },
@@ -124,10 +135,28 @@ export default function Eventos() {
 
       if (error) throw error;
 
-      // ✅ Actualiza la lista local para reflejar el cambio sin recargar
       setEventosInscritos((prev) => [...prev, evento.id]);
+      fetchEventos(); // ✅ actualiza conteo
     } catch (err) {
       console.error("❌ Error al inscribirse:", err);
+    }
+  };
+
+  // 🔹 Cancelar inscripción (no borra, solo cambia el estado)
+  const desinscribirse = async (evento) => {
+    try {
+      const { error } = await supabase
+        .from("participantes")
+        .update({ estado: "Cancelado" })
+        .eq("evento_id", evento.id)
+        .eq("usuario_id", profile.auth_id);
+
+      if (error) throw error;
+
+      setEventosInscritos((prev) => prev.filter((id) => id !== evento.id));
+      fetchEventos(); // ✅ refresca conteo
+    } catch (err) {
+      console.error("❌ Error al desinscribirse:", err);
     }
   };
 
@@ -192,7 +221,7 @@ export default function Eventos() {
       {/* 🔹 Tarjetas de eventos */}
       <Grid>
         {eventos.map((evento) => {
-          const inscrito = eventosInscritos.includes(evento.id); // ✅ Comprueba si ya está inscrito
+          const inscrito = eventosInscritos.includes(evento.id);
 
           return (
             <Grid.Col span={{ base: 12, md: 6, lg: 4 }} key={evento.id}>
@@ -237,15 +266,14 @@ export default function Eventos() {
                   </Text>
                 </Group>
 
+                {/* 🔹 Conteo de Participantes */}
                 <Text size="xs" fw={500}>
                   Participantes
                 </Text>
                 <Progress
                   value={
                     evento.participantes_max
-                      ? (evento.participantes_actual /
-                          evento.participantes_max) *
-                        100
+                      ? (evento.participantes_conteo / evento.participantes_max) * 100
                       : 0
                   }
                   size="sm"
@@ -253,8 +281,7 @@ export default function Eventos() {
                   mb="xs"
                 />
                 <Text size="xs">
-                  {evento.participantes_actual ?? 0}/
-                  {evento.participantes_max ?? evento.cupo_maximo ?? 0}
+                  {evento.participantes_conteo}/{evento.participantes_max ?? evento.cupo_maximo ?? 0}
                 </Text>
 
                 <Badge mt="sm" color="blue" variant="light">
@@ -339,14 +366,20 @@ export default function Eventos() {
                 {profile?.rol === "Participante" && (
                   <Group mt="md" justify="center">
                     {inscrito ? (
-                      <Button size="xs" color="gray" disabled>
-                        ✅ Ya inscrito
+                      <Button
+                        size="xs"
+                        color="red"
+                        onClick={() => desinscribirse(evento)}
+                        disabled={calcularEstado(evento) !== "Activo"}
+                      >
+                        Cancelar inscripción
                       </Button>
                     ) : (
                       <Button
                         size="xs"
                         color="green"
                         onClick={() => inscribirse(evento)}
+                        disabled={calcularEstado(evento) !== "Activo"}
                       >
                         Inscribirme
                       </Button>
