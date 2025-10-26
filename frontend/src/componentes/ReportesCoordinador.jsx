@@ -32,13 +32,23 @@ const safeDate = (raw) => {
   return isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
 };
 
+// 🔹 Lógica de estado igual que en Eventos.jsx
+const calcularEstadoLocal = (e) => {
+  if (e.estado_manual) return e.estado_manual;
+  const fechaEvento = new Date(e.fecha);
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  fechaEvento.setHours(0, 0, 0, 0);
+  return fechaEvento < hoy ? "Completado" : "Activo";
+};
+
 export default function ReportesCoordinador() {
   const { profile } = useAuth();
   const [eventos, setEventos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [periodo, setPeriodo] = useState("");
   const [categoria, setCategoria] = useState("");
-  const [totalParticipantes, setTotalParticipantes] = useState(0); // ✅ Nuevo estado
+  const [totalParticipantes, setTotalParticipantes] = useState(0);
 
   // 🔹 Traer eventos del coordinador actual y contar participantes
   const fetchEventos = async () => {
@@ -50,7 +60,6 @@ export default function ReportesCoordinador() {
         return;
       }
 
-      // 🔹 Traer eventos donde el coordinador es el logueado
       let query = supabase.from("eventos").select("*").eq("coordinador_id", profile.id);
 
       if (categoria) query = query.eq("categoria", categoria);
@@ -63,10 +72,8 @@ export default function ReportesCoordinador() {
       const { data: eventosData, error } = await query;
       if (error) throw error;
 
-      // 🔹 Obtener los IDs de los eventos coordinados
       const eventosIds = eventosData.map((e) => e.id);
 
-      // 🔹 Traer participantes solo de esos eventos
       let totalCount = 0;
       if (eventosIds.length > 0) {
         const { count, error: participantesError } = await supabase
@@ -86,7 +93,6 @@ export default function ReportesCoordinador() {
     }
   };
 
-  // 🔹 Espera a que el perfil esté listo antes de cargar eventos
   useEffect(() => {
     if (profile?.id) fetchEventos();
   }, [periodo, categoria, profile]);
@@ -101,11 +107,12 @@ export default function ReportesCoordinador() {
 
   // 🔹 Cálculos de métricas solo de sus eventos
   const totalEventos = eventos.length;
+
+  // ✅ Lógica de estado sincronizada
   const eventosCompletados = eventos.filter(
-    (e) => (e.estado || e.estado_manual) === "Completado"
+    (e) => calcularEstadoLocal(e) === "Completado"
   ).length;
 
-  // ✅ Reemplazamos el conteo local por el real
   const totalCapacidad = eventos.reduce(
     (sum, e) => sum + Number(e.participantes_max || 0),
     0
@@ -114,7 +121,6 @@ export default function ReportesCoordinador() {
   const promedioAsistenciaNum =
     totalCapacidad > 0 ? (totalParticipantes / totalCapacidad) * 100 : 0;
 
-  // 🔹 Presupuesto total solo de sus eventos
   const presupuestoTotal = eventos.reduce(
     (sum, e) => sum + Number(e.presupuesto_max || 0),
     0
@@ -129,7 +135,7 @@ export default function ReportesCoordinador() {
   const eficienciaPresupuestariaNum =
     presupuestoTotal > 0 ? (fondosEjecutados / presupuestoTotal) * 100 : 0;
 
-  // 🔹 Detalle de eventos
+  // 🔹 Detalle de eventos (solo cambia el estado)
   const detalleEventos = eventos.map((e) => {
     const nombre = e.titulo || e.nombre || "Sin nombre";
     const fecha = safeDate(e.fecha);
@@ -137,7 +143,7 @@ export default function ReportesCoordinador() {
     const presu = Number(e.presupuesto_max || 0);
     const gasto = Number(e.presupuesto_actual || 0);
     const eficiencia = presu > 0 ? (gasto / presu) * 100 : 0;
-    const estado = e.estado || e.estado_manual || "Activo";
+    const estado = calcularEstadoLocal(e); // ✅ usa la nueva lógica
 
     return {
       Evento: nombre,
@@ -178,7 +184,6 @@ export default function ReportesCoordinador() {
 
   return (
     <div>
-      {/* Header */}
       <Group justify="space-between" mb="lg">
         <div>
           <Title order={2}>Reportes del Coordinador</Title>

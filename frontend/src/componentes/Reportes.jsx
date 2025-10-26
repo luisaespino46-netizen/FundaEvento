@@ -33,20 +33,29 @@ const safeDate = (raw) => {
   return isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
 };
 
+// 🔹 Lógica de estado igual que en Eventos.jsx
+const calcularEstadoLocal = (e) => {
+  if (e.estado_manual) return e.estado_manual;
+  const fechaEvento = new Date(e.fecha);
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  fechaEvento.setHours(0, 0, 0, 0);
+  return fechaEvento < hoy ? "Completado" : "Activo";
+};
+
 export default function Reportes() {
   const [eventos, setEventos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [periodo, setPeriodo] = useState("");
   const [categoria, setCategoria] = useState("");
   const [presupuestoGeneral, setPresupuestoGeneral] = useState(0);
-  const [totalParticipantes, setTotalParticipantes] = useState(0); // ✅ Nuevo estado
+  const [totalParticipantes, setTotalParticipantes] = useState(0);
 
   // 🔹 Traer datos desde Supabase
   const fetchEventos = async () => {
     try {
       setLoading(true);
 
-      // 🔹 Traer eventos
       let query = supabase.from("eventos").select("*");
       if (categoria) query = query.eq("categoria", categoria);
       if (periodo) {
@@ -58,7 +67,6 @@ export default function Reportes() {
       const { data: eventosData, error } = await query;
       if (error) throw error;
 
-      // 🔹 Traer configuración de presupuesto
       const { data: config, error: configError } = await supabase
         .from("configuracion")
         .select("presupuesto_general")
@@ -69,7 +77,6 @@ export default function Reportes() {
         setPresupuestoGeneral(config.presupuesto_general || 0);
       }
 
-      // 🔹 Traer participantes (conteo real)
       const { count: participantesCount, error: participantesError } =
         await supabase.from("participantes").select("id", { count: "exact" });
 
@@ -85,7 +92,6 @@ export default function Reportes() {
     }
   };
 
-  // 🔹 Recargar al cambiar filtros
   useEffect(() => {
     fetchEventos();
   }, [periodo, categoria]);
@@ -100,11 +106,12 @@ export default function Reportes() {
 
   // 🔹 Cálculos globales
   const totalEventos = eventos.length;
+
+  // ✅ Usa la misma lógica de estado que en Eventos.jsx
   const eventosCompletados = eventos.filter(
-    (e) => (e.estado || e.estado_manual) === "Completado"
+    (e) => calcularEstadoLocal(e) === "Completado"
   ).length;
 
-  // ✅ Ahora usamos el total real de la tabla participantes
   const totalCapacidad = eventos.reduce(
     (sum, e) => sum + Number(e.participantes_max || 0),
     0
@@ -125,7 +132,7 @@ export default function Reportes() {
   const eficienciaPresupuestariaNum =
     presupuestoTotal > 0 ? (fondosEjecutados / presupuestoTotal) * 100 : 0;
 
-  // 🔹 Detalle de eventos
+  // 🔹 Detalle de eventos (solo se cambia el estado)
   const detalleEventos = eventos.map((e) => {
     const nombre = e.titulo || e.nombre || "Sin nombre";
     const fecha = safeDate(e.fecha);
@@ -133,7 +140,7 @@ export default function Reportes() {
     const presu = Number(e.presupuesto_max || e.presupuesto || 0);
     const gasto = Number(e.presupuesto_actual || 0);
     const eficiencia = presu > 0 ? (gasto / presu) * 100 : 0;
-    const estado = e.estado || e.estado_manual || "Activo";
+    const estado = calcularEstadoLocal(e); // ✅ aquí se usa la nueva lógica
 
     return {
       Evento: nombre,
@@ -146,7 +153,7 @@ export default function Reportes() {
     };
   });
 
-  // 🔹 Generar archivo Excel
+  // 🔹 Exportar a Excel
   const exportarExcel = () => {
     const hojaResumen = [
       ["Reporte General FUNDAEVENTO"],
@@ -259,54 +266,6 @@ export default function Reportes() {
               {formatPercent(eficienciaPresupuestariaNum)}
             </Text>
             <Text size="sm" c="dimmed">Ejecución presupuestaria</Text>
-          </Paper>
-        </Grid.Col>
-      </Grid>
-
-      {/* Transparencia y métricas */}
-      <Grid>
-        <Grid.Col span={6}>
-          <Paper withBorder shadow="sm" radius="md" p="md" mb="lg">
-            <Title order={5} mb="sm">Transparencia de Fondos</Title>
-            <Stack>
-              <Group justify="space-between">
-                <Text size="sm">Presupuesto Asignado</Text>
-                <Text fw={700}>{formatMoney(presupuestoTotal)}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm">Fondos Ejecutados</Text>
-                <Text fw={700} c="blue">{formatMoney(fondosEjecutados)}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="sm">Fondos Disponibles</Text>
-                <Text fw={700} c="green">{formatMoney(fondosDisponibles)}</Text>
-              </Group>
-              <Progress
-                value={(fondosEjecutados / (presupuestoTotal || 1)) * 100}
-                mt="sm"
-              />
-              <Text size="xs" c="dimmed">
-                {formatPercent(eficienciaPresupuestariaNum)} del presupuesto ejecutado
-              </Text>
-            </Stack>
-          </Paper>
-        </Grid.Col>
-
-        <Grid.Col span={6}>
-          <Paper withBorder shadow="sm" radius="md" p="md">
-            <Title order={5} mb="sm">Métricas de Rendimiento</Title>
-            <Stack>
-              <div>
-                <Text size="sm">Promedio de Asistencia</Text>
-                <Progress value={promedioAsistenciaNum} />
-                <Text size="xs">{formatPercent(promedioAsistenciaNum)}</Text>
-              </div>
-              <div>
-                <Text size="sm">Eficiencia Presupuestaria</Text>
-                <Progress value={eficienciaPresupuestariaNum} />
-                <Text size="xs">{formatPercent(eficienciaPresupuestariaNum)}</Text>
-              </div>
-            </Stack>
           </Paper>
         </Grid.Col>
       </Grid>
