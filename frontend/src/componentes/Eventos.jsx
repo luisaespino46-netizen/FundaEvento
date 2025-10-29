@@ -11,6 +11,8 @@ import {
   TextInput,
   Select,
   Menu,
+  Center,
+  Loader,
 } from "@mantine/core";
 import {
   IconCalendar,
@@ -31,7 +33,12 @@ export default function Eventos() {
   const [eventosInscritos, setEventosInscritos] = useState([]);
   const { profile } = useAuth();
 
-  // 🔹 Obtener el ID real del usuario desde la tabla "usuarios"
+  // 🔹 Estados para los filtros
+  const [busqueda, setBusqueda] = useState("");
+  const [estadoFiltro, setEstadoFiltro] = useState("");
+  const [categoriaFiltro, setCategoriaFiltro] = useState("");
+
+  // 🔹 Obtener ID real del usuario
   const obtenerUsuarioId = async () => {
     if (!profile?.auth_id) return;
     const { data, error } = await supabase
@@ -42,7 +49,7 @@ export default function Eventos() {
     if (!error && data) setUsuarioId(data.id);
   };
 
-  // 🔹 Cargar eventos (con conteo de participantes)
+  // 🔹 Cargar eventos
   const fetchEventos = async () => {
     try {
       const { data, error } = await supabase
@@ -67,7 +74,7 @@ export default function Eventos() {
           descripcion: e.descripcion || e.Descripción,
           categoria: e.categoria || e.categorías,
           presupuesto_max: e.presupuesto_max || e.presupuesto_máximo,
-          participantes_conteo: activos, // ✅ solo los inscritos activos
+          participantes_conteo: activos,
         };
       });
 
@@ -77,15 +84,14 @@ export default function Eventos() {
     }
   };
 
-  // 🔹 Cargar los eventos en los que el participante ya está inscrito
+  // 🔹 Cargar eventos inscritos del participante
   const fetchEventosInscritos = async () => {
     if (!profile?.auth_id) return;
-
     const { data, error } = await supabase
       .from("participantes")
       .select("evento_id")
       .eq("usuario_id", profile.auth_id)
-      .eq("estado", "Inscrito"); // ✅ solo los activos
+      .eq("estado", "Inscrito");
 
     if (!error && data) {
       const ids = data.map((p) => p.evento_id);
@@ -101,6 +107,19 @@ export default function Eventos() {
     }
   }, [profile]);
 
+  // 🕒 Evita parpadeo mientras se carga el perfil
+  if (!profile) {
+    return (
+      <Center style={{ height: "60vh", flexDirection: "column" }}>
+        <Loader color="blue" size="lg" />
+        <Text c="dimmed" mt="sm">
+          Cargando datos del usuario...
+        </Text>
+      </Center>
+    );
+  }
+
+  // 🔹 Estado automático del evento
   const calcularEstado = (evento) => {
     if (evento.estado_manual) return evento.estado_manual;
     const fechaEvento = new Date(evento.fecha);
@@ -118,7 +137,7 @@ export default function Eventos() {
     if (!error) fetchEventos();
   };
 
-  // 🔹 Inscribirse en un evento
+  // 🔹 Inscribirse
   const inscribirse = async (evento) => {
     try {
       const { error } = await supabase.from("participantes").insert([
@@ -136,13 +155,13 @@ export default function Eventos() {
       if (error) throw error;
 
       setEventosInscritos((prev) => [...prev, evento.id]);
-      fetchEventos(); // ✅ actualiza conteo
+      fetchEventos();
     } catch (err) {
       console.error("❌ Error al inscribirse:", err);
     }
   };
 
-  // 🔹 Cancelar inscripción (no borra, solo cambia el estado)
+  // 🔹 Desinscribirse
   const desinscribirse = async (evento) => {
     try {
       const { error } = await supabase
@@ -154,21 +173,58 @@ export default function Eventos() {
       if (error) throw error;
 
       setEventosInscritos((prev) => prev.filter((id) => id !== evento.id));
-      fetchEventos(); // ✅ refresca conteo
+      fetchEventos();
     } catch (err) {
       console.error("❌ Error al desinscribirse:", err);
     }
   };
 
+  // 🔹 Aplicar filtros
+  const filteredEventos = eventos.filter((e) => {
+    const texto = busqueda.toLowerCase();
+    const coincideTexto =
+      e.titulo?.toLowerCase().includes(texto) ||
+      e.descripcion?.toLowerCase().includes(texto) ||
+      e.categoria?.toLowerCase().includes(texto);
+
+    const coincideEstado =
+      !estadoFiltro || calcularEstado(e) === estadoFiltro;
+
+    const coincideCategoria =
+      !categoriaFiltro || e.categoria === categoriaFiltro;
+
+    return coincideTexto && coincideEstado && coincideCategoria;
+  });
+
+  // 🔹 Limpiar filtros
+  const limpiarFiltros = () => {
+    setBusqueda("");
+    setEstadoFiltro("");
+    setCategoriaFiltro("");
+  };
+
   return (
     <div>
+      {/* 🔹 Encabezado dinámico */}
       <Group justify="space-between" mb="lg">
         <div>
-          <Title order={2}>Gestión de Eventos</Title>
-          <Text c="dimmed">
-            {profile?.rol === "Coordinador"
-              ? "Visualiza todos los eventos y gestiona los tuyos."
-              : "Administra o participa en los eventos de FUNDAEVENTO"}
+          <Group gap="xs">
+            <IconCalendar size={26} color="#1e88e5" />
+            <Title order={2}>
+              {profile?.rol === "Admin"
+                ? "Administración de Eventos"
+                : profile?.rol === "Coordinador"
+                ? "Gestión y Seguimiento de Eventos"
+                : "Eventos Disponibles"}
+            </Title>
+          </Group>
+
+          <Text c="dimmed" mt={4}>
+            {profile?.rol === "Admin"
+              ? "Administra todos los eventos de FUNDAEVENTO."
+              : profile?.rol === "Coordinador"
+              ? "Organiza y supervisa los eventos que coordinas."
+              : "Consulta, inscríbete y participa en los eventos activos."}
           </Text>
         </div>
 
@@ -198,10 +254,17 @@ export default function Eventos() {
       {/* 🔹 Filtros */}
       <Paper p="md" mb="lg" withBorder radius="md">
         <Group grow>
-          <TextInput placeholder="Buscar eventos..." />
+          <TextInput
+            placeholder="Buscar eventos..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.currentTarget.value)}
+          />
           <Select
             placeholder="Todos los estados"
             data={["Activo", "Completado", "Cancelado"]}
+            value={estadoFiltro}
+            onChange={setEstadoFiltro}
+            clearable
           />
           <Select
             placeholder="Todas las categorías"
@@ -213,183 +276,200 @@ export default function Eventos() {
               "Innovación",
               "Música",
             ]}
+            value={categoriaFiltro}
+            onChange={setCategoriaFiltro}
+            clearable
           />
-          <Button variant="default">Limpiar Filtros</Button>
+          <Button variant="default" onClick={limpiarFiltros}>
+            Limpiar Filtros
+          </Button>
         </Group>
       </Paper>
 
       {/* 🔹 Tarjetas de eventos */}
       <Grid>
-        {eventos.map((evento) => {
-          const inscrito = eventosInscritos.includes(evento.id);
+        {filteredEventos.length === 0 ? (
+          <Text ta="center" c="dimmed">
+            No se encontraron eventos con esos filtros.
+          </Text>
+        ) : (
+          filteredEventos.map((evento) => {
+            const inscrito = eventosInscritos.includes(evento.id);
+            return (
+              <Grid.Col span={{ base: 12, md: 6, lg: 4 }} key={evento.id}>
+                <Paper withBorder shadow="sm" radius="md" p="md">
+                  <Group justify="space-between" mb="xs">
+                    <Text fw={600}>{evento.titulo}</Text>
+                    <Badge
+                      color={
+                        calcularEstado(evento) === "Cancelado"
+                          ? "red"
+                          : calcularEstado(evento) === "Completado"
+                          ? "blue"
+                          : "green"
+                      }
+                    >
+                      {calcularEstado(evento)}
+                    </Badge>
+                  </Group>
 
-          return (
-            <Grid.Col span={{ base: 12, md: 6, lg: 4 }} key={evento.id}>
-              <Paper withBorder shadow="sm" radius="md" p="md">
-                <Group justify="space-between" mb="xs">
-                  <Text fw={600}>{evento.titulo}</Text>
-                  <Badge
-                    color={
-                      calcularEstado(evento) === "Cancelado"
-                        ? "red"
-                        : calcularEstado(evento) === "Completado"
-                        ? "blue"
-                        : "green"
-                    }
-                  >
-                    {calcularEstado(evento)}
-                  </Badge>
-                </Group>
-
-                <Text size="sm" c="dimmed" mb="sm">
-                  {evento.descripcion}
-                </Text>
-
-                <Group gap="xs" mb="xs">
-                  <IconCalendar size={16} />
-                  <Text size="xs">{evento.fecha}</Text>
-                  <IconClock size={16} />
-                  <Text size="xs">{evento.hora}</Text>
-                </Group>
-
-                <Group gap="xs" mb="xs">
-                  <IconMapPin size={16} />
-                  <Text size="xs">{evento.ubicacion ?? evento.lugar}</Text>
-                </Group>
-
-                <Group gap="xs" mb="xs">
-                  <IconUser size={16} />
-                  <Text size="xs">
-                    {evento.coordinador
-                      ? `Coordinador: ${evento.coordinador.nombre} (${evento.coordinador.rol})`
-                      : "Creado por: Administrador (Admin)"}
+                  <Text size="sm" c="dimmed" mb="sm">
+                    {evento.descripcion}
                   </Text>
-                </Group>
 
-                {/* 🔹 Conteo de Participantes */}
-                <Text size="xs" fw={500}>
-                  Participantes
-                </Text>
-                <Progress
-                  value={
-                    evento.participantes_max
-                      ? (evento.participantes_conteo / evento.participantes_max) * 100
-                      : 0
-                  }
-                  size="sm"
-                  color="blue"
-                  mb="xs"
-                />
-                <Text size="xs">
-                  {evento.participantes_conteo}/{evento.participantes_max ?? evento.cupo_maximo ?? 0}
-                </Text>
+                  <Group gap="xs" mb="xs">
+                    <IconCalendar size={16} />
+                    <Text size="xs">{evento.fecha}</Text>
+                    <IconClock size={16} />
+                    <Text size="xs">{evento.hora}</Text>
+                  </Group>
 
-                <Badge mt="sm" color="blue" variant="light">
-                  {evento.categoria}
-                </Badge>
+                  <Group gap="xs" mb="xs">
+                    <IconMapPin size={16} />
+                    <Text size="xs">{evento.ubicacion ?? evento.lugar}</Text>
+                  </Group>
 
-                {/* 🔹 Si es Admin o Coordinador */}
-                {(profile?.rol === "Admin" ||
-                  (profile?.rol === "Coordinador" &&
-                    evento.coordinador_id === usuarioId)) && (
-                  <Group mt="md" justify="space-between">
-                    <Menu shadow="md" width={180} position="bottom-end" withArrow>
-                      <Menu.Target>
-                        <Button size="xs" variant="default">
-                          <IconDots size={16} />
-                        </Button>
-                      </Menu.Target>
-                      <Menu.Dropdown>
-                        <Menu.Item
-                          onClick={() => {
-                            setEventoEditando(evento);
-                            setOpened(true);
-                          }}
-                        >
-                          Editar
-                        </Menu.Item>
+                  <Group gap="xs" mb="xs">
+                    <IconUser size={16} />
+                    <Text size="xs">
+                      {evento.coordinador
+                        ? `Coordinador: ${evento.coordinador.nombre} (${evento.coordinador.rol})`
+                        : "Creado por: Administrador (Admin)"}
+                    </Text>
+                  </Group>
 
-                        {calcularEstado(evento) === "Activo" && (
-                          <>
-                            <Menu.Item
-                              onClick={() =>
-                                cambiarEstadoManual(evento.id, "Cancelado")
-                              }
-                            >
-                              Cancelar
-                            </Menu.Item>
-                            <Menu.Item
-                              onClick={() =>
-                                cambiarEstadoManual(evento.id, "Completado")
-                              }
-                            >
-                              Completar
-                            </Menu.Item>
-                          </>
-                        )}
+                  <Text size="xs" fw={500}>
+                    Participantes
+                  </Text>
+                  <Progress
+                    value={
+                      evento.participantes_max
+                        ? (evento.participantes_conteo /
+                            evento.participantes_max) *
+                          100
+                        : 0
+                    }
+                    size="sm"
+                    color="blue"
+                    mb="xs"
+                  />
+                  <Text size="xs">
+                    {evento.participantes_conteo}/
+                    {evento.participantes_max ??
+                      evento.cupo_maximo ??
+                      0}
+                  </Text>
 
-                        {calcularEstado(evento) === "Cancelado" && (
+                  <Badge mt="sm" color="blue" variant="light">
+                    {evento.categoria}
+                  </Badge>
+
+                  {(profile?.rol === "Admin" ||
+                    (profile?.rol === "Coordinador" &&
+                      evento.coordinador_id === usuarioId)) && (
+                    <Group mt="md" justify="space-between">
+                      <Menu
+                        shadow="md"
+                        width={180}
+                        position="bottom-end"
+                        withArrow
+                      >
+                        <Menu.Target>
+                          <Button size="xs" variant="default">
+                            <IconDots size={16} />
+                          </Button>
+                        </Menu.Target>
+                        <Menu.Dropdown>
                           <Menu.Item
-                            onClick={() =>
-                              cambiarEstadoManual(evento.id, "Activo")
-                            }
+                            onClick={() => {
+                              setEventoEditando(evento);
+                              setOpened(true);
+                            }}
                           >
-                            Reactivar
+                            Editar
                           </Menu.Item>
-                        )}
 
-                        <Menu.Item
+                          {calcularEstado(evento) === "Activo" && (
+                            <>
+                              <Menu.Item
+                                onClick={() =>
+                                  cambiarEstadoManual(evento.id, "Cancelado")
+                                }
+                              >
+                                Cancelar
+                              </Menu.Item>
+                              <Menu.Item
+                                onClick={() =>
+                                  cambiarEstadoManual(evento.id, "Completado")
+                                }
+                              >
+                                Completar
+                              </Menu.Item>
+                            </>
+                          )}
+
+                          {calcularEstado(evento) === "Cancelado" && (
+                            <Menu.Item
+                              onClick={() =>
+                                cambiarEstadoManual(evento.id, "Activo")
+                              }
+                            >
+                              Reactivar
+                            </Menu.Item>
+                          )}
+
+                          <Menu.Item
+                            color="red"
+                            onClick={async () => {
+                              if (
+                                window.confirm(
+                                  "¿Estás seguro de eliminar este evento?"
+                                )
+                              ) {
+                                const { error } = await supabase
+                                  .from("eventos")
+                                  .delete()
+                                  .eq("id", evento.id);
+                                if (!error) fetchEventos();
+                                else alert("Error al eliminar el evento.");
+                              }
+                            }}
+                          >
+                            Eliminar
+                          </Menu.Item>
+                        </Menu.Dropdown>
+                      </Menu>
+                    </Group>
+                  )}
+
+                  {profile?.rol === "Participante" && (
+                    <Group mt="md" justify="center">
+                      {inscrito ? (
+                        <Button
+                          size="xs"
                           color="red"
-                          onClick={async () => {
-                            if (
-                              window.confirm(
-                                "¿Estás seguro de eliminar este evento?"
-                              )
-                            ) {
-                              const { error } = await supabase
-                                .from("eventos")
-                                .delete()
-                                .eq("id", evento.id);
-                              if (!error) fetchEventos();
-                              else alert("Error al eliminar el evento.");
-                            }
-                          }}
+                          onClick={() => desinscribirse(evento)}
+                          disabled={calcularEstado(evento) !== "Activo"}
                         >
-                          Eliminar
-                        </Menu.Item>
-                      </Menu.Dropdown>
-                    </Menu>
-                  </Group>
-                )}
-
-                {/* 🔹 Si es Participante */}
-                {profile?.rol === "Participante" && (
-                  <Group mt="md" justify="center">
-                    {inscrito ? (
-                      <Button
-                        size="xs"
-                        color="red"
-                        onClick={() => desinscribirse(evento)}
-                        disabled={calcularEstado(evento) !== "Activo"}
-                      >
-                        Cancelar inscripción
-                      </Button>
-                    ) : (
-                      <Button
-                        size="xs"
-                        color="green"
-                        onClick={() => inscribirse(evento)}
-                        disabled={calcularEstado(evento) !== "Activo"}
-                      >
-                        Inscribirme
-                      </Button>
-                    )}
-                  </Group>
-                )}
-              </Paper>
-            </Grid.Col>
-          );
-        })}
+                          Cancelar inscripción
+                        </Button>
+                      ) : (
+                        <Button
+                          size="xs"
+                          color="green"
+                          onClick={() => inscribirse(evento)}
+                          disabled={calcularEstado(evento) !== "Activo"}
+                        >
+                          Inscribirme
+                        </Button>
+                      )}
+                    </Group>
+                  )}
+                </Paper>
+              </Grid.Col>
+            );
+          })
+        )}
       </Grid>
     </div>
   );

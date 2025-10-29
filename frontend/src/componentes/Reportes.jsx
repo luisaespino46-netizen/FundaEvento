@@ -8,9 +8,7 @@ import {
   Select,
   Button,
   Badge,
-  Progress,
   Table,
-  Stack,
   Loader,
   Center,
 } from "@mantine/core";
@@ -51,12 +49,19 @@ export default function Reportes() {
   const [presupuestoGeneral, setPresupuestoGeneral] = useState(0);
   const [totalParticipantes, setTotalParticipantes] = useState(0);
 
-  // 🔹 Traer datos desde Supabase
+  // 🔹 Traer datos desde Supabase con participantes
   const fetchEventos = async () => {
     try {
       setLoading(true);
 
-      let query = supabase.from("eventos").select("*");
+      let query = supabase
+        .from("eventos")
+        .select(`
+          *,
+          participantes:participantes(id, estado)
+        `)
+        .order("fecha", { ascending: true });
+
       if (categoria) query = query.eq("categoria", categoria);
       if (periodo) {
         const inicio = `${periodo}-01-01`;
@@ -67,6 +72,7 @@ export default function Reportes() {
       const { data: eventosData, error } = await query;
       if (error) throw error;
 
+      // 🔹 Configuración general (presupuesto total)
       const { data: config, error: configError } = await supabase
         .from("configuracion")
         .select("presupuesto_general")
@@ -77,14 +83,26 @@ export default function Reportes() {
         setPresupuestoGeneral(config.presupuesto_general || 0);
       }
 
-      const { count: participantesCount, error: participantesError } =
-        await supabase.from("participantes").select("id", { count: "exact" });
+      // 🔹 Calcular participantes activos por evento
+      const eventosConConteo = (eventosData || []).map((e) => {
+        const activos = (e.participantes || []).filter(
+          (p) => p.estado === "Inscrito"
+        ).length;
 
-      if (!participantesError) {
-        setTotalParticipantes(participantesCount || 0);
-      }
+        return {
+          ...e,
+          participantes_activos: activos,
+        };
+      });
 
-      setEventos(eventosData || []);
+      // 🔹 Total general de participantes
+      const totalSistema = eventosConConteo.reduce(
+        (sum, e) => sum + e.participantes_activos,
+        0
+      );
+      setTotalParticipantes(totalSistema);
+
+      setEventos(eventosConConteo);
     } catch (err) {
       console.error("❌ Error al cargar eventos:", err.message);
     } finally {
@@ -106,8 +124,6 @@ export default function Reportes() {
 
   // 🔹 Cálculos globales
   const totalEventos = eventos.length;
-
-  // ✅ Usa la misma lógica de estado que en Eventos.jsx
   const eventosCompletados = eventos.filter(
     (e) => calcularEstadoLocal(e) === "Completado"
   ).length;
@@ -132,20 +148,19 @@ export default function Reportes() {
   const eficienciaPresupuestariaNum =
     presupuestoTotal > 0 ? (fondosEjecutados / presupuestoTotal) * 100 : 0;
 
-  // 🔹 Detalle de eventos (solo se cambia el estado)
+  // 🔹 Detalle de eventos
   const detalleEventos = eventos.map((e) => {
     const nombre = e.titulo || e.nombre || "Sin nombre";
     const fecha = safeDate(e.fecha);
-    const pMax = Number(e.participantes_max || 0);
     const presu = Number(e.presupuesto_max || e.presupuesto || 0);
     const gasto = Number(e.presupuesto_actual || 0);
     const eficiencia = presu > 0 ? (gasto / presu) * 100 : 0;
-    const estado = calcularEstadoLocal(e); // ✅ aquí se usa la nueva lógica
+    const estado = calcularEstadoLocal(e);
 
     return {
       Evento: nombre,
       Fecha: fecha,
-      Participantes: `${pMax > 0 ? "—" : "—"}`,
+      Participantes: e.participantes_activos || 0,
       "Presupuesto Asignado (Q)": presu,
       "Fondos Gastados (Q)": gasto,
       Estado: estado,

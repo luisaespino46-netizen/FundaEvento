@@ -50,17 +50,24 @@ export default function ReportesCoordinador() {
   const [categoria, setCategoria] = useState("");
   const [totalParticipantes, setTotalParticipantes] = useState(0);
 
-  // 🔹 Traer eventos del coordinador actual y contar participantes
+  // 🔹 Traer eventos del coordinador actual con conteo de participantes
   const fetchEventos = async () => {
     try {
       setLoading(true);
-
       if (!profile?.id) {
         setLoading(false);
         return;
       }
 
-      let query = supabase.from("eventos").select("*").eq("coordinador_id", profile.id);
+      // 🔹 Traer eventos con participantes relacionados
+      let query = supabase
+        .from("eventos")
+        .select(`
+          *,
+          participantes:participantes(id, estado)
+        `)
+        .eq("coordinador_id", profile.id)
+        .order("fecha", { ascending: true });
 
       if (categoria) query = query.eq("categoria", categoria);
       if (periodo) {
@@ -72,20 +79,22 @@ export default function ReportesCoordinador() {
       const { data: eventosData, error } = await query;
       if (error) throw error;
 
-      const eventosIds = eventosData.map((e) => e.id);
+      // 🔹 Contar participantes activos por evento
+      const eventosConConteo = (eventosData || []).map((e) => {
+        const activos = (e.participantes || []).filter(
+          (p) => p.estado === "Inscrito"
+        ).length;
+        return { ...e, participantes_activos: activos };
+      });
 
-      let totalCount = 0;
-      if (eventosIds.length > 0) {
-        const { count, error: participantesError } = await supabase
-          .from("participantes")
-          .select("id", { count: "exact" })
-          .in("evento_id", eventosIds);
+      // 🔹 Calcular total general de participantes del coordinador
+      const totalSistema = eventosConConteo.reduce(
+        (sum, e) => sum + e.participantes_activos,
+        0
+      );
+      setTotalParticipantes(totalSistema);
 
-        if (!participantesError) totalCount = count || 0;
-      }
-
-      setTotalParticipantes(totalCount);
-      setEventos(eventosData || []);
+      setEventos(eventosConConteo);
     } catch (err) {
       console.error("❌ Error al cargar eventos:", err.message);
     } finally {
@@ -107,8 +116,6 @@ export default function ReportesCoordinador() {
 
   // 🔹 Cálculos de métricas solo de sus eventos
   const totalEventos = eventos.length;
-
-  // ✅ Lógica de estado sincronizada
   const eventosCompletados = eventos.filter(
     (e) => calcularEstadoLocal(e) === "Completado"
   ).length;
@@ -135,20 +142,19 @@ export default function ReportesCoordinador() {
   const eficienciaPresupuestariaNum =
     presupuestoTotal > 0 ? (fondosEjecutados / presupuestoTotal) * 100 : 0;
 
-  // 🔹 Detalle de eventos (solo cambia el estado)
+  // 🔹 Detalle de eventos
   const detalleEventos = eventos.map((e) => {
     const nombre = e.titulo || e.nombre || "Sin nombre";
     const fecha = safeDate(e.fecha);
-    const pMax = Number(e.participantes_max || 0);
     const presu = Number(e.presupuesto_max || 0);
     const gasto = Number(e.presupuesto_actual || 0);
     const eficiencia = presu > 0 ? (gasto / presu) * 100 : 0;
-    const estado = calcularEstadoLocal(e); // ✅ usa la nueva lógica
+    const estado = calcularEstadoLocal(e);
 
     return {
       Evento: nombre,
       Fecha: fecha,
-      Participantes: `${pMax > 0 ? "—" : "—"}`,
+      Participantes: e.participantes_activos || 0,
       "Presupuesto Asignado (Q)": presu,
       "Fondos Gastados (Q)": gasto,
       Estado: estado,
@@ -156,7 +162,7 @@ export default function ReportesCoordinador() {
     };
   });
 
-  // 🔹 Exportar Excel
+  // 🔹 Exportar a Excel
   const exportarExcel = () => {
     const hojaResumen = [
       [`Reporte de ${profile?.nombre || "Coordinador"}`],
@@ -273,7 +279,7 @@ export default function ReportesCoordinador() {
         </Grid.Col>
       </Grid>
 
-      {/* Tabla */}
+      {/* Tabla de detalle */}
       <Paper withBorder shadow="sm" radius="md" p="md" mt="lg">
         <Title order={5} mb="sm">Detalle de tus Eventos</Title>
         <Table highlightOnHover withTableBorder>
