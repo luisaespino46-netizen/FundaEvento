@@ -22,7 +22,9 @@ export default function Calendario() {
         const fechaEvento = new Date(evento.fecha);
         fechaEvento.setHours(0, 0, 0, 0);
 
-        let estado = evento.estado_manual || (fechaEvento < hoy ? "Completado" : "Activo");
+        let estado =
+          evento.estado_manual ||
+          (fechaEvento < hoy ? "Completado" : "Activo");
 
         return {
           id: evento.id,
@@ -68,19 +70,31 @@ export default function Calendario() {
       <Group justify="space-between" mb="lg">
         <div>
           <Title order={2}>Calendario de Eventos</Title>
-          <Text c="dimmed">Vista general de todos los eventos programados</Text>
+          <Text c="dimmed">
+            Vista general de todos los eventos programados
+          </Text>
         </div>
       </Group>
 
-      <Group align="flex-start" grow>
-        {/* Calendario */}
-        <Paper withBorder shadow="sm" radius="md" p="md" style={{ flex: 2 }}>
+      {/* 🔹 Distribución más proporcionada */}
+      <Group align="flex-start" grow style={{ alignItems: "stretch" }}>
+        {/* 📅 Calendario principal */}
+        <Paper
+          withBorder
+          shadow="sm"
+          radius="md"
+          p="md"
+          style={{
+            flex: 2.5, // Más ancho que antes
+            minWidth: "60%",
+          }}
+        >
           <FullCalendar
             plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
             initialView="dayGridMonth"
             locale={esLocale}
             events={eventos}
-            height="80vh"
+            height="78vh"
             dateClick={handleDateClick}
             headerToolbar={{
               left: "prev,next today",
@@ -93,15 +107,17 @@ export default function Calendario() {
               week: "Semana",
               day: "Día",
             }}
+            buttonIcons={false}
+            themeSystem="standard"
           />
         </Paper>
 
-        {/* Panel lateral */}
-        <Stack style={{ flex: 1 }}>
+        {/* 📊 Panel lateral más estrecho */}
+        <Stack style={{ flex: 0.9, minWidth: "300px" }}>
           {/* Eventos por fecha */}
           <Paper withBorder shadow="sm" radius="md" p="md">
             <Title order={5} mb="xs">
-              Eventos -{" "}
+              Eventos –{" "}
               {fechaSeleccionada
                 ? formatearFechaLarga(fechaSeleccionada)
                 : "Selecciona una fecha"}
@@ -122,7 +138,9 @@ export default function Calendario() {
 
           {/* Leyenda */}
           <Paper withBorder shadow="sm" radius="md" p="md">
-            <Title order={5} mb="sm">Leyenda</Title>
+            <Title order={5} mb="sm">
+              Leyenda
+            </Title>
             <Stack gap="xs">
               <Badge color="green">Eventos Activos</Badge>
               <Badge color="blue">Eventos Completados</Badge>
@@ -132,11 +150,19 @@ export default function Calendario() {
 
           {/* Estadísticas */}
           <Paper withBorder shadow="sm" radius="md" p="md">
-            <Title order={5} mb="sm">Estadísticas del Mes</Title>
+            <Title order={5} mb="sm">
+              Estadísticas del Mes
+            </Title>
             <Text size="sm">Total eventos: {eventos.length}</Text>
-            <Text size="sm">Activos: {eventos.filter(e => e.color === "green").length}</Text>
-            <Text size="sm">Completados: {eventos.filter(e => e.color === "blue").length}</Text>
-            <Text size="sm">Cancelados: {eventos.filter(e => e.color === "red").length}</Text>
+            <Text size="sm">
+              Activos: {eventos.filter((e) => e.color === "green").length}
+            </Text>
+            <Text size="sm">
+              Completados: {eventos.filter((e) => e.color === "blue").length}
+            </Text>
+            <Text size="sm">
+              Cancelados: {eventos.filter((e) => e.color === "red").length}
+            </Text>
           </Paper>
         </Stack>
       </Group>
